@@ -5,7 +5,6 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/posix/sys/socket.h>
 #include <zephyr/posix/unistd.h>
 #include <zephyr/posix/arpa/inet.h>
 #include <zephyr/logging/log.h>
@@ -13,18 +12,179 @@
 
 #include <config.h>
 #include "srtp.h"
-#include "rtp.h"
-#include "util.h"
+#include <zephyr/kernel.h>
+#include <zephyr/net/socket.h>
+
+#include "srtp_priv.h"
+#include "cipher_priv.h"
+
+#include <zephyr/net/socket.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(rtpw_sample, LOG_LEVEL_INF);
+
+/*
+ * RTP_HEADER_LEN indicates the size of an RTP header
+ */
+#define RTP_HEADER_LEN 12
+
+/*
+ * RTP_MAX_BUF_LEN defines the largest RTP packet
+ */
+#define RTP_MAX_BUF_LEN 1500
+
+typedef struct {
+    srtp_hdr_t header;
+    char body[RTP_MAX_BUF_LEN];
+} rtp_msg_t;
+
+typedef struct rtp_ctx_t {
+    int socket_fd;
+    rtp_msg_t message;
+    struct k_mutex lock;
+    srtp_ctx_t *srtp_ctx;
+    struct sockaddr_in addr; /* reciever's address */
+
+#ifdef CONFIG_NET_SAMPLE_SENDER
+	uint16_t seq_host;
+    uint32_t ts_host;
+#endif
+} rtp_ctx_t;
+
+srtp_err_status_t rtp_init(rtp_ctx_t *rtp,
+                                  int sock_fd,
+                                  struct sockaddr_in addr,
+                                  uint32_t ssrc)
+{
+#ifdef CONFIG_NET_SAMPLE_SENDER
+    /* Host-order sequence/timestamp */
+    rtp->seq_host = (uint16_t)srtp_cipher_rand_u32_for_tests();
+    rtp->ts_host  = 0;
+
+    /* Initialize RTP header */
+    rtp->message.header.ts  = sys_cpu_to_be32(rtp->ts_host);
+    rtp->message.header.seq = sys_cpu_to_be16(rtp->seq_host);
+#elif defined(CONFIG_NET_SAMPLE_RECEIVER)
+
+    rtp->message.header.seq = 0;
+    rtp->message.header.ts = 0;
+#endif
+    rtp->message.header.ssrc = sys_cpu_to_be32(ssrc);
+    rtp->message.header.m = 0;
+    rtp->message.header.pt = 0x1;
+    rtp->message.header.version = 2;
+    rtp->message.header.p = 0;
+    rtp->message.header.x = 0;
+    rtp->message.header.cc = 0;
+
+    /* set other stuff */
+    rtp->socket_fd = sock_fd;
+    rtp->addr = addr;
+
+    return srtp_err_status_ok;
+}
+
+#ifdef CONFIG_NET_SAMPLE_SENDER
+ssize_t rtp_sendto(rtp_ctx_t *sender, const void *msg, size_t len);
+static inline void rtp_update_header(rtp_ctx_t *sender)
+{
+    k_mutex_lock(&sender->lock, K_FOREVER);
+
+    sender->seq_host++;
+    sender->ts_host++;
+
+    sender->message.header.seq = sys_cpu_to_be16(sender->seq_host);
+    sender->message.header.ts  = sys_cpu_to_be32(sender->ts_host);
+
+    k_mutex_unlock(&sender->lock);
+}
+
+ssize_t rtp_sendto(rtp_ctx_t *sender, const void *msg, size_t len)
+{
+    size_t octets_sent;
+    srtp_err_status_t stat;
+    size_t msg_len = len + RTP_HEADER_LEN;
+    size_t pkt_len = RTP_HEADER_LEN + RTP_MAX_BUF_LEN;
+
+    /* marshal data */
+    memcpy(sender->message.body, msg, len);
+
+    /* update header */
+	rtp_update_header(sender);
+
+    /* apply srtp */
+    stat =
+        srtp_protect(sender->srtp_ctx, (uint8_t *)&sender->message.header,
+                     msg_len, (uint8_t *)&sender->message.header, &pkt_len, 0);
+    if (stat) {
+        LOG_ERR("error: srtp protection failed with code %d\n", stat);
+        return -1;
+    }
+    octets_sent =
+        zsock_sendto(sender->socket_fd, (void *)&sender->message, pkt_len, 0,
+               (struct sockaddr *)&sender->addr, sizeof(struct sockaddr_in));
+
+    if (octets_sent != pkt_len) {
+        LOG_ERR("error: couldn't send message %s", (char *)msg);
+    }
+
+    return octets_sent;
+}
+
+#else
+
+ssize_t rtp_recvfrom(rtp_ctx_t *receiver, void *msg, size_t *len)
+{
+    ssize_t ret;
+    size_t octets_recvd;
+    srtp_err_status_t stat;
+
+    ret = zsock_recvfrom(receiver->socket_fd, (void *)&receiver->message, *len, 0,
+                   (struct sockaddr *)NULL, 0);
+
+    if (ret < 0) {
+        *len = 0;
+        return -1;
+    }
+
+    octets_recvd = ret;
+
+    /* verify rtp header */
+    if (receiver->message.header.version != 2) {
+        *len = 0;
+        return -1;
+    }
+
+    LOG_DBG("%zu octets received from SSRC %u\n", octets_recvd,
+            receiver->message.header.ssrc);
+
+    /* apply srtp */
+    stat = srtp_unprotect(receiver->srtp_ctx,
+                          (uint8_t *)&receiver->message.header, octets_recvd,
+                          (uint8_t *)&receiver->message.header, &octets_recvd);
+    if (stat) {
+        LOG_ERR("error: srtp unprotection failed with code %d%s\n",
+                stat,
+                stat == srtp_err_status_replay_fail ? " (replay check failed)"
+                : stat == srtp_err_status_auth_fail ? " (auth check failed)"
+                                                    : "");
+        return -1;
+    }
+    strncpy(msg, receiver->message.body, octets_recvd);
+
+    return octets_recvd;
+}
+
+#endif
 
 #define MAX_WORD_LEN 128
 #define MAX_KEY_LEN  96
 
-LOG_MODULE_REGISTER(rtpw_sample, LOG_LEVEL_INF);
 
 int main(void)
 {
 	char word[MAX_WORD_LEN];
-	int sock, ret;
+	int sock_fd, ret;
 	struct in_addr rcvr_addr;
 	struct sockaddr_in name;
 	char key[MAX_KEY_LEN];
@@ -53,8 +213,8 @@ int main(void)
 	}
 
 	/* open socket */
-	sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sock < 0) {
+	sock_fd = zsock_socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (sock_fd < 0) {
 		LOG_ERR("couldn't open socket.");
 		return 0;
 	}
@@ -87,21 +247,17 @@ int main(void)
 		return 0;
 	}
 
-#ifdef CONFIG_NET_SAMPLE_SENDER
 	/* initialize sender's rtp and srtp contexts */
-	rtp_sender_t snd;
+	rtp_ctx_t rtp = { 0 };
 
-	snd = rtp_sender_alloc();
-	if (snd == NULL) {
-		LOG_ERR("malloc() failed.");
-		return 0;
-	}
-	rtp_sender_init(snd, sock, name, ssrc);
-	status = rtp_sender_init_srtp(snd, &policy);
+	rtp_init(&rtp, sock_fd, name, ssrc);
+	status = srtp_create(&rtp.srtp_ctx, &policy);
 	if (status) {
 		LOG_ERR("srtp_create() failed with code %d.", status);
 		return 0;
 	}
+
+#ifdef CONFIG_NET_SAMPLE_SENDER
 
 	size_t word_len;
 	/* Up-count the buffer, then send them off */
@@ -112,52 +268,34 @@ int main(void)
 		if (word_len > MAX_WORD_LEN) {
 			LOG_ERR("word %s too large to send.", word);
 		} else {
-			rtp_sendto(snd, word, word_len);
+			rtp_sendto(&rtp, word, word_len);
 			LOG_INF("sending word: %s", word);
 		}
 		k_msleep(500);
 	}
 
-	rtp_sender_deinit_srtp(snd);
-	rtp_sender_dealloc(snd);
 
 #elif defined(CONFIG_NET_SAMPLE_RECEIVER)
-	rtp_receiver_t rcvr;
 
-	if (bind(sock, (struct sockaddr *)&name, sizeof(name)) < 0) {
-		close(sock);
+	if (zsock_bind(sock_fd, (struct sockaddr *)&name, sizeof(name)) < 0) {
+		zsock_close(sock_fd);
 		LOG_ERR("socket bind error.");
 		return 0;
 	}
 
-	rcvr = rtp_receiver_alloc();
-	if (rcvr == NULL) {
-		LOG_ERR("malloc() failed.");
-		return 0;
-	}
-	rtp_receiver_init(rcvr, sock, name, ssrc);
-	status = rtp_receiver_init_srtp(rcvr, &policy);
-	if (status) {
-		LOG_ERR("srtp_create() failed with code %d.", status);
-		return 0;
-	}
-
 	/* get next word and loop */
-
 	while (true) {
 		size_t word_len = MAX_WORD_LEN;
 
-		if (rtp_recvfrom(rcvr, word, &word_len) > -1) {
+		if (rtp_recvfrom(&rtp, word, &word_len) > -1) {
 			LOG_INF("receiving word: %s", word);
 		}
 	}
-
-	rtp_receiver_deinit_srtp(rcvr);
-	rtp_receiver_dealloc(rcvr);
 #else
 #error "Either SENDER or RECEIVER should be defined."
 #endif
-	ret = close(sock);
+	srtp_dealloc(rtp.srtp_ctx);
+	ret = zsock_close(sock_fd);
 	if (ret < 0) {
 		LOG_ERR("Failed to close socket");
 	}

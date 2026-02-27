@@ -7,7 +7,6 @@ zephyr_include_directories(
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/include
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/include
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${ZEPHYR_LIBSRTP_MODULE_DIR}/test
 )
 
 zephyr_library_named(libsrtp)
@@ -28,9 +27,7 @@ zephyr_library_sources(
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/replay/rdbx.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/hash/auth.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/hash/auth_test_cases.c
-  ${ZEPHYR_LIBSRTP_MODULE_DIR}/test/rtp.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/hash/null_auth.c
-  ${ZEPHYR_LIBSRTP_MODULE_DIR}/test/util.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/hash/hmac_mbedtls.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/cipher/aes_icm_mbedtls.c
   ${ZEPHYR_LIBSRTP_MODULE_DIR}/crypto/cipher/aes_gcm_mbedtls.c

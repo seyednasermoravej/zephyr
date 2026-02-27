@@ -12,7 +12,7 @@ config NET_SAMPLE_SRTP_KEY
 
 choice
 	prompt "Program mode"
-	default NET_SAMPLE_SENDER
+	default NET_SAMPLE_RECEIVER
 	help
 	  Select whether this application runs as sender or receiver.
 
