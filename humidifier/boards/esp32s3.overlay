@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/pwm/pwm.h>
+
+/ {
+        pwmleds {
+                compatible = "pwm-leds";
+
+		pwm_leds: pwm_leds
+		{
+			pwms = <&ledc0 0 1000 PWM_POLARITY_NORMAL>, <&ledc0 1 1000 PWM_POLARITY_NORMAL>;
+		};
+                // pwm_led_red0: pwm_led_gpio0_2 {
+                //         label = "PWM RED0";
+                //         pwms = <&ledc0 0 1000 PWM_POLARITY_NORMAL>;
+                // };
+                // pwm_led_green0: pwm_led_gpio0_3 {
+                //         label = "PWM GREEN0";
+                //         pwms = <&ledc0 1 1000 PWM_POLARITY_NORMAL>;
+                // };
+                // pwm_led_blue0: pwm_led_gpio0_4 {
+                //         label = "PWM LED0";
+                //         pwms = <&ledc0 2 1000 PWM_POLARITY_NORMAL>;
+                // };
+
+                // pwm_led_red1: pwm_led_gpio0_5 {
+                //         label = "PWM RED1";
+                //         pwms = <&ledc0 3 1000 PWM_POLARITY_NORMAL>;
+                // };
+
+                // pwm_led_green1: pwm_led_gpio0_6 {
+                //         label = "PWM GREEN1";
+                //         pwms = <&ledc0 4 1000 PWM_POLARITY_NORMAL>;
+                // };
+                // pwm_led_blue1: pwm_led_gpio0_7 {
+                //         label = "PWM LED1";
+                //         pwms = <&ledc0 5 1000 PWM_POLARITY_NORMAL>;
+                // };
+
+                // pwm_led_red2: pwm_led_gpio0_8 {
+                //         label = "PWM RED2";
+                //         pwms = <&ledc0 6 1000 PWM_POLARITY_NORMAL>;
+                // };
+
+                // pwm_led_green2: pwm_led_gpio0_9 {
+                //         label = "PWM GREEN2";
+                //         pwms = <&ledc0 7 1000 PWM_POLARITY_NORMAL>;
+                // };
+                // pwm_led_blue2: pwm_led_gpio0_10 {
+                //         label = "PWM LED2";
+                //         pwms = <&ledc0 8 1000 PWM_POLARITY_NORMAL>;
+                // };
+
+                // pwm_fan: pwmd_fan_gpio0_10 {
+                //         label = "PWM LED2";
+                //         pwms = <&ledc0 9 1000 PWM_POLARITY_NORMAL>;
+                // };
+        };
+
+	cdc_ncm_eth0: cdc_ncm_eth0 {
+		compatible = "zephyr,cdc-ncm-ethernet";
+		remote-mac-address = "00005E005301";
+	};
+};
+
+&pinctrl {
+        ledc0_default: ledc0_default {
+                group1 {
+                        pinmux = <LEDC_CH0_GPIO2>,
+				 <LEDC_CH0_GPIO3>,
+				 <LEDC_CH0_GPIO4>,
+				 <LEDC_CH0_GPIO5>,
+				 <LEDC_CH0_GPIO6>,
+				 <LEDC_CH0_GPIO7>,
+				 <LEDC_CH0_GPIO8>,
+				 <LEDC_CH0_GPIO9>,
+				 <LEDC_CH0_GPIO10>,
+				 <LEDC_CH0_GPIO11>;
+                        output-enable;
+                };
+        };
+};
+
+&ledc0 {
+        pinctrl-0 = <&ledc0_default>;
+        pinctrl-names = "default";
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        channel0@0 {
+                reg = <0x0>;
+                timer = <0>;
+        };
+        channel1@1 {
+                reg = <0x1>;
+                timer = <0>;
+        };
+        channel2@2 {
+                reg = <0x2>;
+                timer = <0>;
+        };
+        channel3@3 {
+                reg = <0x3>;
+                timer = <0>;
+        };
+        channel4@4 {
+                reg = <0x4>;
+                timer = <0>;
+        };
+        channel5@5 {
+                reg = <0x5>;
+                timer = <0>;
+        };
+        channel6@6 {
+                reg = <0x6>;
+                timer = <0>;
+        };
+        channel7@7 {
+                reg = <0x7>;
+                timer = <0>;
+        };
+        channel8@8 {
+                reg = <0x8>;
+                timer = <0>;
+        };
+        channel9@9 {
+                reg = <0x9>;
+                timer = <0>;
+        };
+};
