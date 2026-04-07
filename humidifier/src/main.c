@@ -34,14 +34,15 @@ LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_DBG);
 void pwmInit(const struct pwm_dt_spec *pwm, const char *message);
 void pwmInit(const struct pwm_dt_spec *pwm, const char *message)
 {
-    device_init(pwm->dev);
     char buf[200];
     strcpy(buf, message);
     strcat(buf, pwm->dev->name);
     if (!pwm_is_ready_dt(pwm))
     {
+	LOG_INF("inside the error");
         LOG_ERR("%s\n", buf);
     }
+	LOG_INF("outside the error");
 
 }
 
@@ -392,60 +393,29 @@ static int init_usb(void)
 
 	return 0;
 }
-#define NUM_OF_LEDS	9
 #define DT_SPEC_AND_COMMA(node_id, prop, idx) \
 	PWM_DT_SPEC_GET_BY_IDX(node_id, idx),
-static const struct pwm_dt_spec allleds[] = {
-    PWM_DT_SPEC_GET(DT_NODELABEL(pwm_leds))
+static const struct pwm_dt_spec allLeds[] = {
+    DT_FOREACH_PROP_ELEM(DT_NODELABEL(pwm_leds), pwms, DT_SPEC_AND_COMMA)
 };
+
 int main(void)
 {
+	LOG_INF("Besme Allah");
 	// init_usb();
 
 	// setup_tls();
 	// http_server_start();
-	for (size_t i = 0; i < NUM_OF_LEDS; i++) {
-		char message[64];
+	for (size_t i = 0; i < ARRAY_SIZE(allLeds); i++) {
+		char message[128];
 		sprintf(message, "Error: PWM channel %d is not ready.", i);
-		pwmInit(&allleds[i], message);
+		pwmInit(&allLeds[i], message);
+		LOG_INF("after the for");
 	}
-	pwm_set_pulse_dt(&allleds[1], 100);
+	pwm_set_pulse_dt(&allLeds[0], PWM_MSEC(5));
+	// pwm_set_pulse_dt(&allLeds[1], PWM_MSEC(10));
+	// pwm_set_pulse_dt(&allLeds[3], PWM_MSEC(15));
+	// pwm_set_pulse_dt(&allLeds[4], PWM_MSEC(20));
+	LOG_INF("after pwm");
 	return 0;
 }
-
-		// usbd: zephyr_udc0: usbd@40027000 {
-		// 	reg = < 0x40027000 0x1000 >;    /* in zephyr/dts/arm/nordic/nrf52840.dtsi:504 */
-		// 	interrupts = < 0x27 0x1 >;      /* in zephyr/dts/arm/nordic/nrf52840.dtsi:505 */
-		// 	num-bidir-endpoints = < 0x1 >;  /* in zephyr/dts/arm/nordic/nrf52840.dtsi:506 */
-		// 	num-in-endpoints = < 0x7 >;     /* in zephyr/dts/arm/nordic/nrf52840.dtsi:507 */
-		// 	num-out-endpoints = < 0x7 >;    /* in zephyr/dts/arm/nordic/nrf52840.dtsi:508 */
-		// 	num-isoin-endpoints = < 0x1 >;  /* in zephyr/dts/arm/nordic/nrf52840.dtsi:509 */
-		// 	num-isoout-endpoints = < 0x1 >; /* in zephyr/dts/arm/nordic/nrf52840.dtsi:510 */
-		// 	compatible = "nordic,nrf-usbd"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:289 */
-		// 	status = "okay";                /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:290 */
-		// };
-
-		// usb_serial: uart@60038000 {
-		// 	compatible = "espressif,esp32-usb-serial"; /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:420 */
-		// 	reg = < 0x60038000 0x1000 >;               /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:421 */
-		// 	interrupts = < 0x60 0x0 0x0 >;             /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:423 */
-		// 	interrupt-parent = < &intc >;              /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:424 */
-		// 	clocks = < &clock 0x4 >;                   /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:425 */
-		// 	status = "disabled";                       /* in zephyr/boards/espressif/esp32s3_devkitc/esp32s3_devkitc_procpu.dts:46 */
-		// };
-
-		// /* node '/soc/usb_otg@60080000' defined in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:428 */
-		// usb_otg: zephyr_udc0: usb_otg@60080000 {
-		// 	compatible = "espressif,esp32-usb-otg",
-		// 	             "snps,dwc2";               /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:429 */
-		// 	reg = < 0x60080000 0x40000 >;           /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:430 */
-		// 	interrupts = < 0x26 0x0 0x0 >;          /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:432 */
-		// 	interrupt-parent = < &intc >;           /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:433 */
-		// 	clocks = < &clock 0x4 >;                /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:434 */
-		// 	num-out-eps = < 0x6 >;                  /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:435 */
-		// 	num-in-eps = < 0x6 >;                   /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:436 */
-		// 	ghwcfg1 = < 0x0 >;                      /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:437 */
-		// 	ghwcfg2 = < 0x224dd930 >;               /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:438 */
-		// 	ghwcfg4 = < 0xd3f0a030 >;               /* in zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common.dtsi:439 */
-		// 	status = "okay";                        /* in zephyr/boards/espressif/esp32s3_devkitc/esp32s3_devkitc_procpu.dts:152 */
-		// };

@@ -1,72 +1,277 @@
-/*
- * Copyright (c) 2024, Witekio
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-async function fetchUptime()
-{
-	try {
-		const response = await fetch("/uptime");
-		if (!response.ok) {
-			throw new Error(`Response status: ${response.status}`);
-		}
+// ==========================================
+// 1. DYNAMIC HTML GENERATION
+// ==========================================
+function createPiezoPanelHTML(piezoIndex) {
+    const channels = [
+        { name: 'red', class: 'red', label: 'Red' },
+        { name: 'green', class: 'green', label: 'Green' },
+        { name: 'blue', class: 'blue', label: 'Blue' },
+        { name: 'intensity', class: 'intensity', label: 'Piezo Power' }
+    ];
 
-		const json = await response.json();
-		const uptime = document.getElementById("uptime");
-		uptime.innerHTML = "Uptime: " + json + " milliseconds"
-	} catch (error) {
-		console.error(error.message);
-	}
+    const rowsHTML = channels.map(channel => {
+        const defaultValue = channel.name === 'intensity' ? 100 : 0;
+        const idBase = `piezo${piezoIndex}_${channel.name}`;
+
+        return `
+        <div class="channel-row">
+            <span class="channel-label ${channel.class}">${channel.label}:</span>
+            <input type="range" id="${idBase}_slider" min="0" max="100" value="${defaultValue}"
+                   data-piezo="${piezoIndex}" data-channel="${channel.name}">
+            <div class="intensity-input-group">
+                <input type="number" id="${idBase}_input" class="intensity-input" min="0" max="100" value="${defaultValue}"
+                       data-piezo="${piezoIndex}" data-channel="${channel.name}">
+                <span class="percent-sign">%</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="piezo-panel">
+        <div class="piezo-title">Piezo ${piezoIndex} <span class="piezo-preview" id="preview_${piezoIndex}"></span></div>
+        ${rowsHTML}
+    </div>`;
 }
 
-async function postLed(state)
-{
-	try {
-		const payload = JSON.stringify({"led_num" : 0, "led_state" : state});
+// ==========================================
+// 2. STATE & CORE LOGIC
+// ==========================================
+const piezoStates = {
+    0: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
+    1: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
+    2: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null }
+};
+const fanState = { speed: 0, timeout: null };
 
-		const response = await fetch("/led", {method : "POST", body : payload});
-		if (!response.ok) {
-			throw new Error(`Response satus: ${response.status}`);
-		}
-	} catch (error) {
-		console.error(error.message);
-	}
+function clamp(val) {
+    const num = parseInt(val, 10);
+    return isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
 }
 
-function setNetStat(json_data, stat_name)
-{
-	document.getElementById(stat_name).innerHTML = json_data[stat_name];
+// --- Piezo ---
+function updatePiezoState(piezoIndex, channel, value) {
+    const state = piezoStates[piezoIndex];
+    if (!state) return;
+    if (channel === 'intensity') state.intensity = value;
+    else if (state.led.hasOwnProperty(channel)) state.led[channel] = value;
 }
 
-window.addEventListener("DOMContentLoaded", (ev) => {
-	/* Fetch the uptime once per second */
-	setInterval(fetchUptime, 1000);
+function scheduleSend(piezoIndex) {
+    const state = piezoStates[piezoIndex];
+    if (!state) return;
+    clearTimeout(state.timeout);
+    state.timeout = setTimeout(() => postPiezoLED(piezoIndex), 300);
+}
 
-	/* POST to the LED endpoint when the buttons are pressed */
-	const led_on_btn = document.getElementById("led_on");
-	led_on_btn.addEventListener("click", (event) => {
-		console.log("led_on clicked");
-		postLed(true);
-	})
+function updatePreview(piezoIndex) {
+    const state = piezoStates[piezoIndex];
+    if (!state) return;
+    const { led } = state;
+    const r = Math.round(led.red * 2.55);
+    const g = Math.round(led.green * 2.55);
+    const b = Math.round(led.blue * 2.55);
+    const preview = document.getElementById(`preview_${piezoIndex}`);
+    if (preview) preview.style.background = `rgb(${r},${g},${b})`;
+}
 
-	const led_off_btn = document.getElementById("led_off");
-	led_off_btn.addEventListener("click", (event) => {
-		console.log("led_off clicked");
-		postLed(false);
-	})
+async function postPiezoLED(piezoIndex) {
+    const state = piezoStates[piezoIndex];
+    if (!state) return;
+    const { led, intensity } = state;
+    try {
+        const res = await fetch("/led", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                piezo_num: piezoIndex,
+                led: { red: Math.round(led.red * 2.55), green: Math.round(led.green * 2.55), blue: Math.round(led.blue * 2.55) },
+                piezo_intensity: intensity
+            })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) { console.error(`Failed to update Piezo ${piezoIndex}:`, e.message); }
+}
 
-	/* Setup websocket for handling network stats */
-	const ws = new WebSocket("/");
+// --- Fan ---
+function scheduleFanSend() {
+    clearTimeout(fanState.timeout);
+    fanState.timeout = setTimeout(postFan, 300);
+}
 
-	ws.onmessage = (event) => {
-		const data = JSON.parse(event.data);
-		setNetStat(data, "bytes_recv");
-		setNetStat(data, "bytes_sent");
-		setNetStat(data, "ipv6_pkt_recv");
-		setNetStat(data, "ipv6_pkt_sent");
-		setNetStat(data, "ipv4_pkt_recv");
-		setNetStat(data, "ipv4_pkt_sent");
-		setNetStat(data, "tcp_bytes_recv");
-		setNetStat(data, "tcp_bytes_sent");
-	}
-})
+async function postFan() {
+    try {
+        const res = await fetch("/fan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ speed: fanState.speed })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) { console.error("Failed to update fan:", e.message); }
+}
+
+// --- Network ---
+async function fetchNetworkCredentials() {
+    try {
+        const res = await fetch("/network");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const ssidInput = document.getElementById("network-ssid");
+        if (ssidInput && data.ssid) ssidInput.value = data.ssid;
+        // Password intentionally left blank for security
+    } catch (e) { console.warn("Could not fetch network credentials:", e.message); }
+}
+
+async function saveNetworkCredentials() {
+    const ssid = document.getElementById("network-ssid").value.trim();
+    const password = document.getElementById("network-password").value;
+    const statusEl = document.getElementById("network-status");
+    const saveBtn = document.getElementById("network-save-btn");
+
+    if (!ssid) {
+        statusEl.textContent = "SSID cannot be empty.";
+        statusEl.className = "status-msg error";
+        return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+    statusEl.textContent = "";
+
+    try {
+        const res = await fetch("/network", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ssid, password })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        statusEl.textContent = "✅ Credentials saved. Device may reboot to apply.";
+        statusEl.className = "status-msg success";
+        document.getElementById("network-password").value = "";
+    } catch (e) {
+        statusEl.textContent = `❌ Failed: ${e.message}`;
+        statusEl.className = "status-msg error";
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Credentials";
+    }
+}
+
+// ==========================================
+// 3. EVENT BINDING
+// ==========================================
+function bindPiezoControls() {
+    function handlePiezoChange(element, isFinal = false) {
+        const piezoIdx = element.dataset.piezo;
+        const channel = element.dataset.channel;
+        const isSlider = element.type === 'range';
+        let value = isSlider ? parseInt(element.value, 10) : parseFloat(element.value);
+        if (isNaN(value)) value = 0;
+        const clamped = clamp(value);
+
+        const counterpartId = `piezo${piezoIdx}_${channel}_${isSlider ? 'input' : 'slider'}`;
+        const counterpart = document.getElementById(counterpartId);
+        if (counterpart) counterpart.value = clamped;
+
+        updatePiezoState(piezoIdx, channel, clamped);
+        updatePreview(piezoIdx);
+        if (isSlider || isFinal) scheduleSend(piezoIdx);
+    }
+
+    document.querySelectorAll('input[type="range"][data-piezo]').forEach(slider => {
+        slider.addEventListener('input', e => handlePiezoChange(e.target, false));
+    });
+    document.querySelectorAll('input[type="number"][data-piezo]').forEach(input => {
+        input.addEventListener('input', e => handlePiezoChange(e.target, false));
+        input.addEventListener('change', e => handlePiezoChange(e.target, true));
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+    });
+}
+
+function bindFanControls() {
+    function handleFanChange(element, isFinal = false) {
+        const isSlider = element.type === 'range';
+        let value = isSlider ? parseInt(element.value, 10) : parseFloat(element.value);
+        if (isNaN(value)) value = 0;
+        const clamped = clamp(value);
+
+        const counterpartId = `fan_speed_${isSlider ? 'input' : 'slider'}`;
+        const counterpart = document.getElementById(counterpartId);
+        if (counterpart) counterpart.value = clamped;
+
+        fanState.speed = clamped;
+        if (isSlider || isFinal) scheduleFanSend();
+    }
+
+    const fanSlider = document.getElementById('fan_speed_slider');
+    const fanInput = document.getElementById('fan_speed_input');
+    if (fanSlider) fanSlider.addEventListener('input', e => handleFanChange(e.target, false));
+    if (fanInput) {
+        fanInput.addEventListener('input', e => handleFanChange(e.target, false));
+        fanInput.addEventListener('change', e => handleFanChange(e.target, true));
+        fanInput.addEventListener('keydown', e => { if (e.key === 'Enter') fanInput.blur(); });
+    }
+}
+
+function bindNetworkControls() {
+    const saveBtn = document.getElementById("network-save-btn");
+    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCredentials);
+}
+
+// ==========================================
+// 4. UPTIME FEATURE
+// ==========================================
+async function fetchUptime() {
+    try {
+        const res = await fetch("/uptime");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const el = document.getElementById("uptime");
+        if (el) el.textContent = `Uptime: ${json} milliseconds`;
+    } catch (e) { console.error("Uptime fetch error:", e.message); }
+}
+
+// ==========================================
+// PASSWORD TOGGLE LOGIC
+// ==========================================
+function bindPasswordToggle() {
+    const pwdInput = document.getElementById('network-password');
+    const toggleBtn = document.getElementById('password-toggle');
+    if (!pwdInput || !toggleBtn) return;
+
+    toggleBtn.addEventListener('click', () => {
+        const isHidden = pwdInput.type === 'password';
+        pwdInput.type = isHidden ? 'text' : 'password';
+        toggleBtn.textContent = isHidden ? '🙈' : '👁️';
+        toggleBtn.title = isHidden ? 'Hide password' : 'Show password';
+        toggleBtn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    });
+}
+// ==========================================
+// 5. INITIALIZATION
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+    // Generate Piezo panels
+    const container = document.getElementById('piezo-panels-container');
+    if (container) {
+        let panelsHTML = '';
+        for (let i = 0; i < 3; i++) {
+            panelsHTML += createPiezoPanelHTML(i);
+            if (!piezoStates[i]) piezoStates[i] = { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null };
+        }
+        container.innerHTML = panelsHTML;
+    }
+
+    // Bind all controls
+    bindPiezoControls();
+    bindFanControls();
+    bindNetworkControls();
+    bindPasswordToggle();
+
+    // Init previews
+    [0, 1, 2].forEach(updatePreview);
+
+    // Fetch initial data
+    fetchNetworkCredentials();
+    fetchUptime();
+    setInterval(fetchUptime, 1000);
+});
