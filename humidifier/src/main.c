@@ -20,6 +20,8 @@
 #include <zephyr/data/json.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/net/net_config.h>
+
+#include <zephyr/drivers/led.h>
 //-DCONF_FILE=prj.conf -DOVERLAY_CONFIG=boards/esp32s3_devkitc.conf -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 #if CONFIG_USB_DEVICE_STACK_NEXT
 #include <sample_usbd.h>
@@ -29,22 +31,6 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_DBG);
-
-#include <zephyr/drivers/pwm.h>
-void pwmInit(const struct pwm_dt_spec *pwm, const char *message);
-void pwmInit(const struct pwm_dt_spec *pwm, const char *message)
-{
-    char buf[200];
-    strcpy(buf, message);
-    strcat(buf, pwm->dev->name);
-    if (!pwm_is_ready_dt(pwm))
-    {
-	LOG_INF("inside the error");
-        LOG_ERR("%s\n", buf);
-    }
-	LOG_INF("outside the error");
-
-}
 
 struct led_command {
 	int led_num;
@@ -393,12 +379,13 @@ static int init_usb(void)
 
 	return 0;
 }
-#define DT_SPEC_AND_COMMA(node_id, prop, idx) \
-	PWM_DT_SPEC_GET_BY_IDX(node_id, idx),
-static const struct pwm_dt_spec allLeds[] = {
-    DT_FOREACH_PROP_ELEM(DT_NODELABEL(pwm_leds), pwms, DT_SPEC_AND_COMMA)
+enum ledIndices
+{
+	RED = 0,
+	GREEN,
+	BLUE,
 };
-
+#define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
 int main(void)
 {
 	LOG_INF("Besme Allah");
@@ -406,16 +393,115 @@ int main(void)
 
 	// setup_tls();
 	// http_server_start();
-	for (size_t i = 0; i < ARRAY_SIZE(allLeds); i++) {
-		char message[128];
-		sprintf(message, "Error: PWM channel %d is not ready.", i);
-		pwmInit(&allLeds[i], message);
-		LOG_INF("after the for");
+	const struct device *led_pwm;
+	uint8_t led;
+
+	led_pwm = DEVICE_DT_GET(LED_PWM_NODE_ID);
+	if (!device_is_ready(led_pwm)) {
+		LOG_ERR("Device %s is not ready", led_pwm->name);
+		return 0;
 	}
-	pwm_set_pulse_dt(&allLeds[0], PWM_MSEC(5));
-	// pwm_set_pulse_dt(&allLeds[1], PWM_MSEC(10));
-	// pwm_set_pulse_dt(&allLeds[3], PWM_MSEC(15));
-	// pwm_set_pulse_dt(&allLeds[4], PWM_MSEC(20));
-	LOG_INF("after pwm");
+	 led_set_brightness(led_pwm, 0, 50);
+	// const struct device *piezo0LedsDev = DT_COMPAT_GET_ANY_STATUS_OKAY(piezoleds);
+	// const struct device *piezo0LedsDev = DT_COMPAT_GET_ANY_STATUS_OKAY(piezoleds);
+	// const struct device *piezo0LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezoleds));
+	// if (!device_is_ready(piezo0LedsDev)) {
+	// 	LOG_ERR("Device %s is not ready", piezo0LedsDev->name);
+	// 	return 0;
+	// }
+	// uint8_t ledLevel = 10;
+	// int err = led_set_brightness(piezo0LedsDev, RED, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 20;
+	// err = led_set_brightness(piezo0LedsDev, GREEN, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 30;
+	// err = led_set_brightness(piezo0LedsDev, BLUE, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+
+	// const struct device *piezo1LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezo1_leds));
+	// if (!device_is_ready(piezo1LedsDev)) {
+	// 	LOG_ERR("Device %s is not ready", piezo1LedsDev->name);
+	// 	return 0;
+	// }
+	// ledLevel = 20;
+	// err = led_set_brightness(piezo1LedsDev, RED, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 50;
+	// err = led_set_brightness(piezo1LedsDev, GREEN, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 60;
+	// err = led_set_brightness(piezo1LedsDev, BLUE, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+
+	// const struct device *piezo2LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezo2_leds));
+	// if (!device_is_ready(piezo2LedsDev)) {
+	// 	LOG_ERR("Device %s is not ready", piezo1LedsDev->name);
+	// 	return 0;
+	// }
+	// ledLevel = 20;
+	// err = led_set_brightness(piezo2LedsDev, RED, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 50;
+	// err = led_set_brightness(piezo2LedsDev, GREEN, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// ledLevel = 60;
+	// err = led_set_brightness(piezo2LedsDev, BLUE, ledLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	return 0;
+	// }
+	// const struct device *fanDev;
+	// fanDev = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(fan));
+	// if (!device_is_ready(fan)) {
+	// 	LOG_ERR("Device %s is not ready", fan->name);
+	// 	return 0;
+	// }
+
+	// uint8_t fanLevel = 50;
+	// err = led_set_brightness(fan, 0, fanLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d fan intensity=%d\n", err, fanLevel);
+	// 	return 0;
+	// }
+
+
+	// const struct device *piezo;
+	// fan = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(piezo));
+	// if (!device_is_ready(piezo)) {
+	// 	LOG_ERR("Device %s is not ready", piezo->name);
+	// 	return 0;
+	// }
+
+	// uint8_t piezoLevel = 50;
+	// err = led_set_brightness(piezo, 0, piezoLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d fan intensity=%d\n", err, piezoLevel);
+	// 	return 0;
+	// }
 	return 0;
 }
