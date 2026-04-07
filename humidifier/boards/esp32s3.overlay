@@ -3,85 +3,28 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #include <zephyr/dt-bindings/pwm/pwm.h>
 
 / {
+        aliases {
+                pwm-0 = &ledc0;
+                pwm-led0 = &pwm_led_blue;
+        };
 
         pwmleds {
                 compatible = "pwm-leds";
 
-		pwm_leds: pwm_leds
-		{
-			pwms = <&ledc0 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-			// pwms = <&ledc0 0 1000 PWM_POLARITY_NORMAL>, <&ledc0 1 1000 PWM_POLARITY_NORMAL>;
-		};
-                // pwm_led_red0: pwm_led_gpio0_2 {
-                //         label = "PWM RED0";
-                //         pwms = <&ledc0 0 1000 PWM_POLARITY_NORMAL>;
-                // };
-                // pwm_led_green0: pwm_led_gpio0_3 {
-                //         label = "PWM GREEN0";
-                //         pwms = <&ledc0 1 1000 PWM_POLARITY_NORMAL>;
-                // };
-                // pwm_led_blue0: pwm_led_gpio0_4 {
-                //         label = "PWM LED0";
-                //         pwms = <&ledc0 2 1000 PWM_POLARITY_NORMAL>;
-                // };
-
-                // pwm_led_red1: pwm_led_gpio0_4 {
-                //         label = "PWM RED1";
-                //         pwms = <&ledc0 3 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-
-                // pwm_led_green1: pwm_led_gpio0_5 {
-                //         label = "PWM GREEN1";
-                //         pwms = <&ledc0 4 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-                // pwm_led_blue1: pwm_led_gpio0_6 {
-                //         label = "PWM BLUE1";
-                //         pwms = <&ledc0 5 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-
-                // pwm_led_red2: pwm_led_gpio0_7 {
-                //         label = "PWM RED2";
-                //         pwms = <&ledc0 6 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-
-                // pwm_led_green2: pwm_led_gpio0_8 {
-                //         label = "PWM GREEN2";
-                //         pwms = <&ledc0 7 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-                // pwm_led_blue2: pwm_led_gpio0_9 {
-                //         label = "PWM BLUE2";
-                //         pwms = <&ledc0 8 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
-
-                // pwm_fan: pwmd_fan_gpio0_10 {
-                //         label = "PWM FAN";
-                //         pwms = <&ledc0 9 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-                // };
+                pwm_led_blue: pwm_led_gpio0_2 {
+                        label = "PWM LED0";
+                        pwms = <&ledc0 0 1000 PWM_POLARITY_NORMAL>;
+                };
         };
-
-	// cdc_ncm_eth0: cdc_ncm_eth0 {
-	// 	compatible = "zephyr,cdc-ncm-ethernet";
-	// 	remote-mac-address = "00005E005301";
-	// };
 };
 
 &pinctrl {
         ledc0_default: ledc0_default {
                 group1 {
-                        pinmux = <LEDC_CH0_GPIO2>,
-				 <LEDC_CH0_GPIO3>,
-				 <LEDC_CH0_GPIO4>,
-				 <LEDC_CH0_GPIO5>,
-				 <LEDC_CH0_GPIO6>,
-				 <LEDC_CH0_GPIO7>,
-				 <LEDC_CH0_GPIO8>;
-				//  <LEDC_CH0_GPIO9>,
-				//  <LEDC_CH0_GPIO10>,
-				//  <LEDC_CH0_GPIO11>;
+                        pinmux = <LEDC_CH0_GPIO2>;
                         output-enable;
                 };
         };
@@ -98,40 +41,129 @@
                 reg = <0x0>;
                 timer = <0>;
         };
-        channel1@1 {
-                reg = <0x1>;
-                timer = <0>;
-        };
-        channel2@2 {
-                reg = <0x2>;
-                timer = <0>;
-        };
-        channel3@3 {
-                reg = <0x3>;
-                timer = <0>;
-        };
-        channel4@4 {
-                reg = <0x4>;
-                timer = <0>;
-        };
-        channel5@5 {
-                reg = <0x5>;
-                timer = <0>;
-        };
-        channel6@6 {
-                reg = <0x6>;
-                timer = <0>;
-        };
-        channel7@7 {
-                reg = <0x7>;
-                timer = <0>;
-        };
-        channel8@8 {
-                reg = <0x8>;
-                timer = <0>;
-        };
-        channel9@9 {
-                reg = <0x9>;
-                timer = <0>;
-        };
 };
+
+// #include <zephyr/dt-bindings/pwm/pwm.h>
+
+// / {
+
+        // piezo{
+        //         compatible = "pwm-leds";
+	// 	status = "okay";
+	// 	piezoleds: piezoleds{
+	// 		pwms = <&ledc0 2 PWM_MSEC(20) PWM_POLARITY_NORMAL>, <&ledc0 3 PWM_MSEC(20) PWM_POLARITY_NORMAL>,
+	// 		       <&ledc0 4 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+	// 	};
+
+        // };
+        // piezo1 {
+        //         compatible = "pwm-leds";
+
+	// 	piezo1_leds: piezo1_leds
+	// 	{
+	// 		pwms = <&ledc0 5 PWM_MSEC(20) PWM_POLARITY_NORMAL>, <&ledc0 6 PWM_MSEC(20) PWM_POLARITY_NORMAL>,
+	// 		       <&ledc0 7 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+	// 	};
+
+        // };
+        // piezo2 {
+        //         compatible = "pwm-leds";
+
+		// 	piezo2_leds: piezo2_leds
+		// 	{
+		// 		pwms = <&ledc0 8 PWM_MSEC(20) PWM_POLARITY_NORMAL>, <&ledc0 9 PWM_MSEC(20) PWM_POLARITY_NORMAL>,
+		// 		       <&ledc0 10 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		// 		//        <&ledc0 8 PWM_MSEC(20) PWM_POLARITY_NORMAL>, <&ledc0 9 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		// 	};
+
+        // };
+	// fan
+	// {
+	// 	compatible = "pwm-leds";
+	// 	fan0: fan0
+	// 	{
+	// 		pwms = <&ledc0 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+	// 	};
+	// };
+	// piezo
+	// {
+	// 	compatible = "pwm-leds";
+	// 	piezo_piezo: piezo_piezo
+	// 	{
+	// 		pwms = <&ledc0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+	// 	};
+	// };
+
+
+	// cdc_ncm_eth0: cdc_ncm_eth0 {
+	// 	compatible = "zephyr,cdc-ncm-ethernet";
+	// 	remote-mac-address = "00005E005301";
+	// };
+// };
+
+// &pinctrl {
+//         ledc0_default: ledc0_default {
+//                 group1 {
+//                         pinmux = <LEDC_CH0_GPIO1>,
+// 				 <LEDC_CH1_GPIO2>,
+// 				 <LEDC_CH2_GPIO3>,
+// 				 <LEDC_CH3_GPIO4>,
+// 				 <LEDC_CH4_GPIO5>,
+// 				 <LEDC_CH5_GPIO6>,
+// 				 <LEDC_CH6_GPIO7>,
+// 				 <LEDC_CH7_GPIO8>;
+// 				//  <LEDC_CH8_GPIO9>,
+// 				//  <LEDC_CH9_GPIO10>;
+//                         output-enable;
+//                 };
+//         };
+// };
+
+// &ledc0 {
+//         pinctrl-0 = <&ledc0_default>;
+//         pinctrl-names = "default";
+//         status = "okay";
+//         #address-cells = <1>;
+//         #size-cells = <0>;
+
+//         channel0@0 {
+//                 reg = <0x0>;
+//                 timer = <0>;
+//         };
+//         channel1@1 {
+//                 reg = <0x1>;
+//                 timer = <0>;
+//         };
+//         channel2@2 {
+//                 reg = <0x2>;
+//                 timer = <0>;
+//         };
+//         channel3@3 {
+//                 reg = <0x3>;
+//                 timer = <0>;
+//         };
+//         channel4@4 {
+//                 reg = <0x4>;
+//                 timer = <0>;
+//         };
+//         channel5@5 {
+//                 reg = <0x5>;
+//                 timer = <0>;
+//         };
+//         channel6@6 {
+//                 reg = <0x6>;
+//                 timer = <0>;
+//         };
+//         channel7@7 {
+//                 reg = <0x7>;
+//                 timer = <0>;
+//         };
+//         channel8@8 {
+//                 reg = <0x8>;
+//                 timer = <0>;
+//         };
+//         channel9@9 {
+//                 reg = <0x9>;
+//                 timer = <0>;
+//         };
+// };
