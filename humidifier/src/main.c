@@ -21,7 +21,7 @@
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/net/net_config.h>
 
-#include <zephyr/drivers/led.h>
+#include <zephyr/drivers/pwm.h>
 //-DCONF_FILE=prj.conf -DOVERLAY_CONFIG=boards/esp32s3_devkitc.conf -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 #if CONFIG_USB_DEVICE_STACK_NEXT
 #include <sample_usbd.h>
@@ -379,11 +379,19 @@ static int init_usb(void)
 
 	return 0;
 }
-enum ledIndices
+enum pwmIndices
 {
-	RED = 0,
-	GREEN,
-	BLUE,
+	FAN = 0,
+	PIEZO,
+	RED0,
+	GREEN0,
+	BLUE0,
+	RED1,
+	GREEN1,
+	BLUE1,
+	// RED2,
+	// GREEN2,
+	// BLUE2,
 };
 #define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
 int main(void)
@@ -393,114 +401,83 @@ int main(void)
 
 	// setup_tls();
 	// http_server_start();
-	const struct device *led_pwm;
-	uint8_t led;
-
-	led_pwm = DEVICE_DT_GET(LED_PWM_NODE_ID);
-	if (!device_is_ready(led_pwm)) {
-		LOG_ERR("Device %s is not ready", led_pwm->name);
+	const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
+	// const struct pwm_dt_spec piezo0LedsPWM = PWM_DT_SPEC_GET(DT_NODELABEL(piezo0leds));
+	// const struct device *pwmsDev = piezo0LedsPWM.dev;
+	if (!device_is_ready(pwmsDev)) {
+		LOG_ERR("Device %s is not ready", pwmsDev->name);
 		return 0;
 	}
-	 led_set_brightness(led_pwm, 0, 50);
-	// const struct device *piezo0LedsDev = DT_COMPAT_GET_ANY_STATUS_OKAY(piezoleds);
-	// const struct device *piezo0LedsDev = DT_COMPAT_GET_ANY_STATUS_OKAY(piezoleds);
-	// const struct device *piezo0LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezoleds));
-	// if (!device_is_ready(piezo0LedsDev)) {
-	// 	LOG_ERR("Device %s is not ready", piezo0LedsDev->name);
-	// 	return 0;
-	// }
-	// uint8_t ledLevel = 10;
-	// int err = led_set_brightness(piezo0LedsDev, RED, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-	// ledLevel = 20;
-	// err = led_set_brightness(piezo0LedsDev, GREEN, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-	// ledLevel = 30;
-	// err = led_set_brightness(piezo0LedsDev, BLUE, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
+	int err, pwmLevel;
+	pwmLevel = 10;
+	err = led_set_brightness(pwmsDev, FAN, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 20;
+	err = led_set_brightness(pwmsDev, PIEZO, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 30;
+	err = led_set_brightness(pwmsDev, RED0, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 40;
+	err = led_set_brightness(pwmsDev, GREEN0, pwmLevel);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 50;
+	err = led_set_brightness(pwmsDev, BLUE0, pwmLevel);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
 
-	// const struct device *piezo1LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezo1_leds));
-	// if (!device_is_ready(piezo1LedsDev)) {
-	// 	LOG_ERR("Device %s is not ready", piezo1LedsDev->name);
-	// 	return 0;
-	// }
-	// ledLevel = 20;
-	// err = led_set_brightness(piezo1LedsDev, RED, ledLevel);
+	pwmLevel = 60;
+	err = led_set_brightness(pwmsDev, RED1, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 70;
+	err = led_set_brightness(pwmsDev, GREEN1, pwmLevel);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 80;
+	err = led_set_brightness(pwmsDev, BLUE1, pwmLevel);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	// err = led_set_brightness(pwmsDev, RED2, pwmLevel);
+	// LOG_INF("err=%d \n", err);
 	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 	// 	return 0;
 	// }
-	// ledLevel = 50;
-	// err = led_set_brightness(piezo1LedsDev, GREEN, ledLevel);
+	// pwmLevel = 20;
+	// err = led_set_brightness(pwmsDev, GREEN2, pwmLevel);
 	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 	// 	return 0;
 	// }
-	// ledLevel = 60;
-	// err = led_set_brightness(piezo1LedsDev, BLUE, ledLevel);
+	// pwmLevel = 30;
+	// err = led_set_brightness(pwmsDev, BLUE2, pwmLevel);
 	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-
-	// const struct device *piezo2LedsDev = DEVICE_DT_GET(DT_NODELABEL(piezo2_leds));
-	// if (!device_is_ready(piezo2LedsDev)) {
-	// 	LOG_ERR("Device %s is not ready", piezo1LedsDev->name);
-	// 	return 0;
-	// }
-	// ledLevel = 20;
-	// err = led_set_brightness(piezo2LedsDev, RED, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-	// ledLevel = 50;
-	// err = led_set_brightness(piezo2LedsDev, GREEN, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-	// ledLevel = 60;
-	// err = led_set_brightness(piezo2LedsDev, BLUE, ledLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, ledLevel);
-	// 	return 0;
-	// }
-	// const struct device *fanDev;
-	// fanDev = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(fan));
-	// if (!device_is_ready(fan)) {
-	// 	LOG_ERR("Device %s is not ready", fan->name);
-	// 	return 0;
-	// }
-
-	// uint8_t fanLevel = 50;
-	// err = led_set_brightness(fan, 0, fanLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d fan intensity=%d\n", err, fanLevel);
-	// 	return 0;
-	// }
-
-
-	// const struct device *piezo;
-	// fan = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(piezo));
-	// if (!device_is_ready(piezo)) {
-	// 	LOG_ERR("Device %s is not ready", piezo->name);
-	// 	return 0;
-	// }
-
-	// uint8_t piezoLevel = 50;
-	// err = led_set_brightness(piezo, 0, piezoLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d fan intensity=%d\n", err, piezoLevel);
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 	// 	return 0;
 	// }
 	return 0;
