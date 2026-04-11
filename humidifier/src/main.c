@@ -20,6 +20,8 @@
 #include <zephyr/data/json.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/net/net_config.h>
+#include <zephyr/net/wifi.h>
+#include <zephyr/net/wifi_mgmt.h>
 
 #include <zephyr/drivers/pwm.h>
 //-DCONF_FILE=prj.conf -DOVERLAY_CONFIG=boards/esp32s3_devkitc.conf -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
@@ -32,17 +34,95 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_DBG);
 
-struct led_command {
-	int led_num;
-	bool led_state;
+#define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
+
+static const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
+enum pwmIndices
+{
+	FAN = 0,
+	PIEZO,
+	RED0,
+	GREEN0,
+	BLUE0,
+	RED1,
+	GREEN1,
+	BLUE1,
+	RED2,
+	GREEN2,
+	BLUE2,
 };
 
-static const struct json_obj_descr led_command_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct led_command, led_num, JSON_TOK_NUMBER),
-	JSON_OBJ_DESCR_PRIM(struct led_command, led_state, JSON_TOK_TRUE),
+static void setPiezoPwm(int piezoNum,
+			int red,
+			int green,
+			int blue,
+			int intensity)
+{
+	int redCh, greenCh, blueCh;
+
+	switch (piezoNum) {
+
+	case 0:
+		redCh = RED0;
+		greenCh = GREEN0;
+		blueCh = BLUE0;
+		break;
+
+	case 1:
+		redCh = RED1;
+		greenCh = GREEN1;
+		blueCh = BLUE1;
+		break;
+
+	case 2:
+		redCh = RED2;
+		greenCh = GREEN2;
+		blueCh = BLUE2;
+		break;
+
+	default:
+		LOG_ERR("Invalid piezo %d", piezoNum);
+		return;
+	}
+
+	led_set_brightness(pwmsDev, redCh, red);
+	led_set_brightness(pwmsDev, greenCh, green);
+	led_set_brightness(pwmsDev, blueCh, blue);
+	led_set_brightness(pwmsDev, PIEZO, intensity);
+}
+
+struct rgbValues
+{
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+};
+struct piezoCommand {
+	uint8_t piezoNum;
+	struct rgbValues led;
+	uint8_t piezoIntensity;
 };
 
-static const struct device *leds_dev = DEVICE_DT_GET_ANY(gpio_leds);
+struct fanCommand {
+	uint8_t speed;
+};
+
+static const struct json_obj_descr rgbDescr[] = {
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, red, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, green, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, blue, JSON_TOK_NUMBER),
+};
+
+static const struct json_obj_descr piezoDescr[] = {
+    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoNum, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_OBJECT(struct piezoCommand, led, rgbDescr),
+    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoIntensity, JSON_TOK_NUMBER),
+};
+
+static const struct json_obj_descr fanDescr[] = {
+	JSON_OBJ_DESCR_PRIM(struct fanCommand, speed, JSON_TOK_NUMBER),
+};
+
 
 static uint8_t index_html_gz[] = {
 #include "index.html.gz.inc"
@@ -158,37 +238,35 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 	.user_data = NULL,
 };
 
-static void parse_led_post(uint8_t *buf, size_t len)
+static void parsePiezosPost(uint8_t *buf, size_t len)
 {
-	int ret;
-	struct led_command cmd;
-	const int expected_return_code = BIT_MASK(ARRAY_SIZE(led_command_descr));
+	struct piezoCommand cmd;
 
-	ret = json_obj_parse(buf, len, led_command_descr, ARRAY_SIZE(led_command_descr), &cmd);
-	if (ret != expected_return_code) {
-		LOG_WRN("Failed to fully parse JSON payload, ret=%d", ret);
-		return;
-	}
+	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
 
-	LOG_INF("POST request setting LED %d to state %d", cmd.led_num, cmd.led_state);
+	LOG_INF("Piezo %d RGB(%d,%d,%d) Intensity %d",
+		cmd.piezoNum,
+		cmd.led.red,
+		cmd.led.green,
+		cmd.led.blue,
+		cmd.piezoIntensity);
 
-	if (leds_dev != NULL) {
-		if (cmd.led_state) {
-			led_on(leds_dev, cmd.led_num);
-		} else {
-			led_off(leds_dev, cmd.led_num);
-		}
-	}
+	setPiezoPwm(
+		cmd.piezoNum,
+		cmd.led.red,
+		cmd.led.green,
+		cmd.led.blue,
+		cmd.piezoIntensity);
 }
 
-static int led_handler(struct http_client_ctx *client, enum http_transaction_status status,
-		       const struct http_request_ctx *request_ctx,
-		       struct http_response_ctx *response_ctx, void *user_data)
+static int piezosHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
 {
-	static uint8_t post_payload_buf[32];
+	static uint8_t postBuf[32];
 	static size_t cursor;
-
-	LOG_DBG("LED handler status %d, size %zu", status, request_ctx->data_len);
 
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
@@ -196,32 +274,104 @@ static int led_handler(struct http_client_ctx *client, enum http_transaction_sta
 		return 0;
 	}
 
-	if (request_ctx->data_len + cursor > sizeof(post_payload_buf)) {
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
 		cursor = 0;
 		return -ENOMEM;
 	}
 
-	/* Copy payload to our buffer. Note that even for a small payload, it may arrive split into
-	 * chunks (e.g. if the header size was such that the whole HTTP request exceeds the size of
-	 * the client buffer).
-	 */
-	memcpy(post_payload_buf + cursor, request_ctx->data, request_ctx->data_len);
-	cursor += request_ctx->data_len;
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
+
+	cursor += requestCtx->data_len;
 
 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		parse_led_post(post_payload_buf, cursor);
+		parsePiezosPost(postBuf, cursor);
+		cursor = 0;
+	}
+
+	return 0;
+}
+static void parseFanPost(uint8_t *buf, size_t len)
+{
+	struct fanCommand cmd;
+
+	int ret = json_obj_parse(
+		buf,
+		len,
+		fanDescr,
+		ARRAY_SIZE(fanDescr),
+		&cmd);
+
+	if (ret < 0) {
+		LOG_ERR("Fan JSON parse failed");
+		return;
+	}
+
+	LOG_INF("Fan speed %d", cmd.speed);
+
+	led_set_brightness(
+		pwmsDev,
+		FAN,
+		cmd.speed);
+}
+
+static int fanHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static uint8_t postBuf[32];
+	static size_t cursor;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
+
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
+
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
+
+	cursor += requestCtx->data_len;
+
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		parseFanPost(postBuf, cursor);
 		cursor = 0;
 	}
 
 	return 0;
 }
 
-static struct http_resource_detail_dynamic led_resource_detail = {
+static struct http_resource_detail_dynamic fanResourceDetail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+	},
+	.cb = fanHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(
+	fanResource,
+	test_http_service,
+	"/fan",
+	&fanResourceDetail);
+
+
+static struct http_resource_detail_dynamic piezosResourceDetail = {
 	.common = {
 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
 		},
-	.cb = led_handler,
+	.cb = piezosHandler,
 	.user_data = NULL,
 };
 
@@ -271,7 +421,7 @@ HTTP_RESOURCE_DEFINE(echo_resource, test_http_service, "/dynamic", &echo_resourc
 
 HTTP_RESOURCE_DEFINE(uptime_resource, test_http_service, "/uptime", &uptime_resource_detail);
 
-HTTP_RESOURCE_DEFINE(led_resource, test_http_service, "/led", &led_resource_detail);
+HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
 
 #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
 HTTP_RESOURCE_DEFINE(ws_echo_resource, test_http_service, "/ws_echo", &ws_echo_resource_detail);
@@ -379,35 +529,28 @@ static int init_usb(void)
 
 	return 0;
 }
-enum pwmIndices
-{
-	FAN = 0,
-	PIEZO,
-	RED0,
-	GREEN0,
-	BLUE0,
-	RED1,
-	GREEN1,
-	BLUE1,
-	// RED2,
-	// GREEN2,
-	// BLUE2,
-};
-#define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
+
 int main(void)
 {
+	struct net_if *iface = net_if_get_default();
+
+	struct wifi_connect_req_params connect_params = {
+		.ssid = "Naser",
+		.ssid_length = strlen("Naser"),
+		.psk = "nasimore",
+		.psk_length = strlen("nasimore"),
+		.security = WIFI_SECURITY_TYPE_PSK,
+	};
+	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
 	LOG_INF("Besme Allah");
 	// init_usb();
 
 	// setup_tls();
-	// http_server_start();
-	const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
-	// const struct pwm_dt_spec piezo0LedsPWM = PWM_DT_SPEC_GET(DT_NODELABEL(piezo0leds));
-	// const struct device *pwmsDev = piezo0LedsPWM.dev;
 	if (!device_is_ready(pwmsDev)) {
 		LOG_ERR("Device %s is not ready", pwmsDev->name);
 		return 0;
 	}
+	// http_server_start();
 	int err, pwmLevel;
 	pwmLevel = 10;
 	err = led_set_brightness(pwmsDev, FAN, pwmLevel);
@@ -443,25 +586,25 @@ int main(void)
 		return 0;
 	}
 
-	pwmLevel = 60;
-	err = led_set_brightness(pwmsDev, RED1, pwmLevel);
-	LOG_INF("err=%d \n", err);
-	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-		return 0;
-	}
-	pwmLevel = 70;
-	err = led_set_brightness(pwmsDev, GREEN1, pwmLevel);
-	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-		return 0;
-	}
-	pwmLevel = 80;
-	err = led_set_brightness(pwmsDev, BLUE1, pwmLevel);
-	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-		return 0;
-	}
+	// pwmLevel = 60;
+	// err = led_set_brightness(pwmsDev, RED1, pwmLevel);
+	// LOG_INF("err=%d \n", err);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+	// 	return 0;
+	// }
+	// pwmLevel = 70;
+	// err = led_set_brightness(pwmsDev, GREEN1, pwmLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+	// 	return 0;
+	// }
+	// pwmLevel = 80;
+	// err = led_set_brightness(pwmsDev, BLUE1, pwmLevel);
+	// if (err < 0) {
+	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+	// 	return 0;
+	// }
 	// err = led_set_brightness(pwmsDev, RED2, pwmLevel);
 	// LOG_INF("err=%d \n", err);
 	// if (err < 0) {
