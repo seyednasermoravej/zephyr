@@ -83,8 +83,12 @@ async function postPiezoLED(piezoIndex) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                piezo_num: piezoIndex,
-                led: { red: Math.round(led.red * 2.55), green: Math.round(led.green * 2.55), blue: Math.round(led.blue * 2.55) },
+                piezoNum: piezoIndex,
+                led: {
+                    red: Math.round(led.red * 2.55),
+                    green: Math.round(led.green * 2.55),
+                    blue: Math.round(led.blue * 2.55)
+                },
                 piezo_intensity: intensity
             })
         });
