@@ -136,6 +136,6 @@
                 timer = <0>;
         };
 };
-&wifi{
-	status = "okay";
-};
+// &wifi{
+// 	status = "okay";
+// };
