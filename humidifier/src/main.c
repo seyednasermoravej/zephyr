@@ -532,21 +532,21 @@ struct http_resource_detail_websocket ws_netstats_resource_detail = {
 
 int main(void)
 {
-// 	struct net_if *iface = net_if_get_default();
+	struct net_if *iface = net_if_get_default();
 
-// 	struct wifi_connect_req_params connect_params = {
-// 		// .ssid = "Naser-Wi-Fi",
-// 		// .ssid_length = strlen("Naser-Wi-Fi"),
-// 		// .psk = "1020151515",
-// 		// .psk_length = strlen("1020151515"),
-// 		.ssid = "Naser",
-// 		.ssid_length = strlen("Naser"),
-// 		.psk = "nasimore",
-// 		.psk_length = strlen("nasimore"),
-// 		.security = WIFI_SECURITY_TYPE_PSK,
-// 	};
-// 	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
-	// LOG_INF("Besme Allah");
+	struct wifi_connect_req_params connect_params = {
+		// .ssid = "Naser-Wi-Fi",
+		// .ssid_length = strlen("Naser-Wi-Fi"),
+		// .psk = "1020151515",
+		// .psk_length = strlen("1020151515"),
+		.ssid = "Naser",
+		.ssid_length = strlen("Naser"),
+		.psk = "nasimore",
+		.psk_length = strlen("nasimore"),
+		.security = WIFI_SECURITY_TYPE_PSK,
+	};
+	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
+	LOG_INF("Besme Allah");
 	// init_usb();
 
 	// setup_tls();
