@@ -18,8 +18,7 @@
 
 		piezo_piezo: piezo_piezo
 		{
-			// pwms = <&ledc0 1 PWM_NSEC(588) PWM_POLARITY_NORMAL>;
-			pwms = <&mcpwm0 0 PWM_NSEC(588) PWM_POLARITY_NORMAL>;
+			pwms = <&ledc0 1 PWM_NSEC(588) PWM_POLARITY_NORMAL>;
 		};
 
 		piezo0led_red{
@@ -66,8 +65,8 @@
 &pinctrl {
         ledc0_default: ledc0_default {
                 group1 {
-                        pinmux = <LEDC_CH0_GPIO1>,
-				//  <LEDC_CH1_GPIO19>,
+                        pinmux = <LEDC_CH0_GPIO18>,
+				 <LEDC_CH8_GPIO19>,
 				 <LEDC_CH2_GPIO3>,
 				 <LEDC_CH3_GPIO4>,
 				 <LEDC_CH4_GPIO5>,
@@ -79,16 +78,6 @@
                         output-enable;
                 };
         };
-
-	mcpwm0_default: mcpwm0_default {
-		group1 {
-			pinmux = <MCPWM0_OUT0A_GPIO18>;
-			// pinmux = <MCPWM0_OUT0A_GPIO19>;
-				// <MCPWM0_OUT0B_GPIO2>,
-				// <MCPWM0_OUT1A_GPIO4>;
-			output-enable;
-		};
-      };
 };
 
 &ledc0 {
@@ -98,20 +87,20 @@
         #address-cells = <1>;
         #size-cells = <0>;
 
-        channel0@9 {
-                reg = <0x9>;
+        channel0@0 {
+                reg = <0x0>;
                 timer = <0>;
         };
-        channel1@1 {
-                reg = <0x1>;
+        channel8@8 {
+                reg = <0x8>;
                 timer = <1>;
         };
         channel2@2 {
-                reg = <0x0>;
+                reg = <0x2>;
                 timer = <2>;
         };
         channel3@3 {
-                reg = <0xa>;
+                reg = <0x3>;
                 timer = <3>;
         };
         channel4@4 {
@@ -146,13 +135,4 @@
         //         reg = <0xb>;
         //         timer = <0>;
         // };
-};
-
-&mcpwm0 {
-	pinctrl-0 = <&mcpwm0_default>;
-	pinctrl-names = "default";
-	status = "okay";
-	prescale = <93>;
-	prescale-timer0 = <103>;
-
 };
