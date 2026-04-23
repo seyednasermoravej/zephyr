@@ -532,20 +532,20 @@ struct http_resource_detail_websocket ws_netstats_resource_detail = {
 
 int main(void)
 {
-	// struct net_if *iface = net_if_get_default();
+	struct net_if *iface = net_if_get_default();
 
-	// struct wifi_connect_req_params connect_params = {
-	// 	// .ssid = "Naser-Wi-Fi",
-	// 	// .ssid_length = strlen("Naser-Wi-Fi"),
-	// 	// .psk = "1020151515",
-	// 	// .psk_length = strlen("1020151515"),
-	// 	.ssid = "Naser",
-	// 	.ssid_length = strlen("Naser"),
-	// 	.psk = "nasimore",
-	// 	.psk_length = strlen("nasimore"),
-	// 	.security = WIFI_SECURITY_TYPE_PSK,
-	// };
-	// net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
+	struct wifi_connect_req_params connect_params = {
+		.ssid = "Naser-Wi-Fi",
+		.ssid_length = strlen("Naser-Wi-Fi"),
+		.psk = "1020151515",
+		.psk_length = strlen("1020151515"),
+		// .ssid = "Naser",
+		// .ssid_length = strlen("Naser"),
+		// .psk = "nasimore",
+		// .psk_length = strlen("nasimore"),
+		.security = WIFI_SECURITY_TYPE_PSK,
+	};
+	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
 	LOG_INF("Besme Allah");
 	// init_usb();
 
@@ -556,7 +556,7 @@ int main(void)
 	}
 	// http_server_start();
 	int err, pwmLevel;
-	pwmLevel = 10;
+	pwmLevel = 50;
 	err = led_set_brightness(pwmsDev, FAN, pwmLevel);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
@@ -579,53 +579,59 @@ int main(void)
 	}
 	pwmLevel = 40;
 	err = led_set_brightness(pwmsDev, GREEN0, pwmLevel);
+	LOG_INF("err=%d \n", err);
 	if (err < 0) {
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 		return 0;
 	}
-	// pwmLevel = 50;
-	// err = led_set_brightness(pwmsDev, BLUE0, pwmLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
+	pwmLevel = 50;
+	err = led_set_brightness(pwmsDev, BLUE0, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
 
-	// pwmLevel = 60;
-	// err = led_set_brightness(pwmsDev, RED1, pwmLevel);
-	// LOG_INF("err=%d \n", err);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
-	// pwmLevel = 70;
-	// err = led_set_brightness(pwmsDev, GREEN1, pwmLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
-	// pwmLevel = 80;
-	// err = led_set_brightness(pwmsDev, BLUE1, pwmLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
-	// err = led_set_brightness(pwmsDev, RED2, pwmLevel);
-	// LOG_INF("err=%d \n", err);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
-	// pwmLevel = 20;
-	// err = led_set_brightness(pwmsDev, GREEN2, pwmLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
-	// pwmLevel = 30;
-	// err = led_set_brightness(pwmsDev, BLUE2, pwmLevel);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-	// 	return 0;
-	// }
+	pwmLevel = 60;
+	err = led_set_brightness(pwmsDev, RED1, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 70;
+	err = led_set_brightness(pwmsDev, GREEN1, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 80;
+	err = led_set_brightness(pwmsDev, BLUE1, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	err = led_set_brightness(pwmsDev, RED2, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 20;
+	err = led_set_brightness(pwmsDev, GREEN2, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
+	pwmLevel = 30;
+	err = led_set_brightness(pwmsDev, BLUE2, pwmLevel);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		return 0;
+	}
 	return 0;
 }
