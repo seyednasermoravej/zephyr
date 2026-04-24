@@ -79,7 +79,7 @@ async function postPiezoLED(piezoIndex) {
     if (!state) return;
     const { led, intensity } = state;
     try {
-        const res = await fetch("/led", {
+        const res = await fetch("/piezo", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

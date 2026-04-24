@@ -303,8 +303,10 @@ static struct http_resource_detail_dynamic piezosResourceDetail = {
 	.user_data = NULL,
 };
 
-HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
-
+HTTP_RESOURCE_DEFINE(piezosResource,
+		     test_http_service,
+		     "/piezo",
+		     &piezosResourceDetail);
 
 
 static void parseFanPost(uint8_t *buf, size_t len)
