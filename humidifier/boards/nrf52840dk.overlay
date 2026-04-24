@@ -18,9 +18,9 @@
 		pwm_led2 {
 			pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
-		// pwm_led3 {
-		// 	pwms = <&sw_pwm 3 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
-		// };
+		pwm_led3 {
+			pwms = <&pwm0 3 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+		};
 	};
 };
 
@@ -29,6 +29,7 @@
 	group1{
 		psels = <NRF_PSEL(PWM_OUT0, 0, 13)>,
 			<NRF_PSEL(PWM_OUT1, 0, 14)>,
-			<NRF_PSEL(PWM_OUT2, 0, 15)>;
+			<NRF_PSEL(PWM_OUT2, 0, 15)>,
+			<NRF_PSEL(PWM_OUT3, 0, 16)>;
 	};
 };

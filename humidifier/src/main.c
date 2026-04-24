@@ -294,6 +294,19 @@ static int piezosHandler(struct http_client_ctx *client,
 
 	return 0;
 }
+static struct http_resource_detail_dynamic piezosResourceDetail = {
+	.common = {
+			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+		},
+	.cb = piezosHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
+
+
+
 static void parseFanPost(uint8_t *buf, size_t len)
 {
 	struct fanCommand cmd;
@@ -368,14 +381,6 @@ HTTP_RESOURCE_DEFINE(
 	&fanResourceDetail);
 
 
-static struct http_resource_detail_dynamic piezosResourceDetail = {
-	.common = {
-			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-		},
-	.cb = piezosHandler,
-	.user_data = NULL,
-};
 
 #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
 static uint8_t ws_echo_buffer[1024];
@@ -423,7 +428,6 @@ HTTP_RESOURCE_DEFINE(echo_resource, test_http_service, "/dynamic", &echo_resourc
 
 HTTP_RESOURCE_DEFINE(uptime_resource, test_http_service, "/uptime", &uptime_resource_detail);
 
-HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
 
 #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
 HTTP_RESOURCE_DEFINE(ws_echo_resource, test_http_service, "/ws_echo", &ws_echo_resource_detail);
@@ -579,9 +583,6 @@ int main(void)
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 		return 0;
 	}
-
-	// setup_tls();
-#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	pwmLevel = 40;
 	err = led_set_brightness(pwmsDev, GREEN0, pwmLevel);
 	LOG_INF("err=%d \n", err);
@@ -589,6 +590,9 @@ int main(void)
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 		return 0;
 	}
+
+	// setup_tls();
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	pwmLevel = 50;
 	err = led_set_brightness(pwmsDev, BLUE0, pwmLevel);
 	LOG_INF("err=%d \n", err);
