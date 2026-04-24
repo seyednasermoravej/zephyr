@@ -34,7 +34,7 @@
 #include "ws.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_INF);
 
 #define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
 
@@ -54,11 +54,12 @@ enum pwmIndices
 	BLUE2,
 };
 
-static void setPiezoPwm(int piezoNum,
-			int red,
-			int green,
-			int blue,
-			int intensity)
+static void setPiezoPwm(uint8_t piezoNum,
+			uint8_t red,
+			uint8_t green,
+			uint8_t blue,
+			uint8_t intensity
+			)
 {
 	int redCh, greenCh, blueCh;
 
@@ -102,7 +103,7 @@ struct rgbValues
 struct piezoCommand {
 	uint8_t piezoNum;
 	struct rgbValues led;
-	uint8_t piezoIntensity;
+	uint8_t intensity;
 };
 
 struct fanCommand {
@@ -110,21 +111,20 @@ struct fanCommand {
 };
 
 static const struct json_obj_descr rgbDescr[] = {
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, red, JSON_TOK_NUMBER),
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, green, JSON_TOK_NUMBER),
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, blue, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, red, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, green, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct rgbValues, blue, JSON_TOK_UINT),
 };
 
 static const struct json_obj_descr piezoDescr[] = {
-    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoNum, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoNum, JSON_TOK_UINT),
     JSON_OBJ_DESCR_OBJECT(struct piezoCommand, led, rgbDescr),
-    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoIntensity, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct piezoCommand, intensity, JSON_TOK_UINT),
 };
 
 static const struct json_obj_descr fanDescr[] = {
-	JSON_OBJ_DESCR_PRIM(struct fanCommand, speed, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct fanCommand, speed, JSON_TOK_UINT),
 };
-
 
 static uint8_t index_html_gz[] = {
 #include "index.html.gz.inc"
@@ -243,22 +243,28 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 static void parsePiezosPost(uint8_t *buf, size_t len)
 {
 	struct piezoCommand cmd;
-
 	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
 
-	LOG_INF("Piezo %d RGB(%d,%d,%d) Intensity %d",
+	if (ret < 0) {
+		LOG_ERR("Piezo JSON parse failed");
+		return;
+	}
+
+	LOG_INF("Piezo %u RGB(%u,%u,%u) Intensity %u",
 		cmd.piezoNum,
 		cmd.led.red,
 		cmd.led.green,
 		cmd.led.blue,
-		cmd.piezoIntensity);
+		cmd.intensity
+	);
 
 	setPiezoPwm(
 		cmd.piezoNum,
 		cmd.led.red,
 		cmd.led.green,
 		cmd.led.blue,
-		cmd.piezoIntensity);
+		cmd.intensity
+	);
 }
 
 static int piezosHandler(struct http_client_ctx *client,
@@ -267,7 +273,7 @@ static int piezosHandler(struct http_client_ctx *client,
 		      struct http_response_ctx *responseCtx,
 		      void *userData)
 {
-	static uint8_t postBuf[32];
+	static uint8_t postBuf[128];
 	static size_t cursor;
 
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
@@ -305,7 +311,7 @@ static struct http_resource_detail_dynamic piezosResourceDetail = {
 
 HTTP_RESOURCE_DEFINE(piezosResource,
 		     test_http_service,
-		     "/piezo",
+		     "/piezos",
 		     &piezosResourceDetail);
 
 

@@ -36,7 +36,7 @@ function createPiezoPanelHTML(piezoIndex) {
 // ==========================================
 // 2. STATE & CORE LOGIC
 // ==========================================
-const piezoStates = {
+const piezosState = {
     0: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
     1: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
     2: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null }
@@ -50,21 +50,21 @@ function clamp(val) {
 
 // --- Piezo ---
 function updatePiezoState(piezoIndex, channel, value) {
-    const state = piezoStates[piezoIndex];
+    const state = piezosState[piezoIndex];
     if (!state) return;
     if (channel === 'intensity') state.intensity = value;
     else if (state.led.hasOwnProperty(channel)) state.led[channel] = value;
 }
 
 function scheduleSend(piezoIndex) {
-    const state = piezoStates[piezoIndex];
+    const state = piezosState[piezoIndex];
     if (!state) return;
     clearTimeout(state.timeout);
-    state.timeout = setTimeout(() => postPiezoLED(piezoIndex), 300);
+    state.timeout = setTimeout(() => postPiezo(piezoIndex), 300);
 }
 
 function updatePreview(piezoIndex) {
-    const state = piezoStates[piezoIndex];
+    const state = piezosState[piezoIndex];
     if (!state) return;
     const { led } = state;
     const r = Math.round(led.red * 2.55);
@@ -74,22 +74,19 @@ function updatePreview(piezoIndex) {
     if (preview) preview.style.background = `rgb(${r},${g},${b})`;
 }
 
-async function postPiezoLED(piezoIndex) {
-    const state = piezoStates[piezoIndex];
-    if (!state) return;
-    const { led, intensity } = state;
+async function postPiezo(piezoIndex) {
     try {
-        const res = await fetch("/piezo", {
+        const res = await fetch("/piezos", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                piezoNum: piezoIndex,
+                piezoNum: parseInt(piezoIndex, 10),
                 led: {
-                    red: Math.round(led.red * 2.55),
-                    green: Math.round(led.green * 2.55),
-                    blue: Math.round(led.blue * 2.55)
+                    red: Math.round(piezosState[piezoIndex].led.red * 2.55),
+                    green: Math.round(piezosState[piezoIndex].led.green * 2.55),
+                    blue: Math.round(piezosState[piezoIndex].led.blue * 2.55)
                 },
-                piezo_intensity: intensity
+                intensity: piezosState[piezoIndex].intensity
             })
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -260,7 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let panelsHTML = '';
         for (let i = 0; i < 3; i++) {
             panelsHTML += createPiezoPanelHTML(i);
-            if (!piezoStates[i]) piezoStates[i] = { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null };
+            if (!piezosState[i]) piezosState[i] = { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null };
         }
         container.innerHTML = panelsHTML;
     }
