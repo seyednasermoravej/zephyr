@@ -20,11 +20,13 @@
 #include <zephyr/data/json.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/net/net_config.h>
+
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 #include <zephyr/net/wifi.h>
 #include <zephyr/net/wifi_mgmt.h>
+#endif
 
 #include <zephyr/drivers/pwm.h>
-//-DCONF_FILE=prj.conf -DOVERLAY_CONFIG=boards/esp32s3_devkitc.conf -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 #if CONFIG_USB_DEVICE_STACK_NEXT
 #include <sample_usbd.h>
 #endif
@@ -406,132 +408,133 @@ struct http_resource_detail_websocket ws_netstats_resource_detail = {
 
 #endif /* CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE */
 
-// #if defined(CONFIG_NET_SAMPLE_HTTP_SERVICE)
-// static uint16_t test_http_service_port = CONFIG_NET_SAMPLE_HTTP_SERVER_SERVICE_PORT;
-// HTTP_SERVICE_DEFINE(test_http_service, NULL, &test_http_service_port,
-// 		    CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL);
+#if defined(CONFIG_NET_SAMPLE_HTTP_SERVICE)
+static uint16_t test_http_service_port = CONFIG_NET_SAMPLE_HTTP_SERVER_SERVICE_PORT;
+HTTP_SERVICE_DEFINE(test_http_service, NULL, &test_http_service_port,
+		    CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL);
 
-// HTTP_RESOURCE_DEFINE(index_html_gz_resource, test_http_service, "/",
-// 		     &index_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(index_html_gz_resource, test_http_service, "/",
+		     &index_html_gz_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(main_js_gz_resource, test_http_service, "/main.js",
-// 		     &main_js_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(main_js_gz_resource, test_http_service, "/main.js",
+		     &main_js_gz_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(echo_resource, test_http_service, "/dynamic", &echo_resource_detail);
+HTTP_RESOURCE_DEFINE(echo_resource, test_http_service, "/dynamic", &echo_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(uptime_resource, test_http_service, "/uptime", &uptime_resource_detail);
+HTTP_RESOURCE_DEFINE(uptime_resource, test_http_service, "/uptime", &uptime_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
+HTTP_RESOURCE_DEFINE(piezosResource, test_http_service, "/piezos", &piezosResourceDetail);
 
-// #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
-// HTTP_RESOURCE_DEFINE(ws_echo_resource, test_http_service, "/ws_echo", &ws_echo_resource_detail);
+#if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
+HTTP_RESOURCE_DEFINE(ws_echo_resource, test_http_service, "/ws_echo", &ws_echo_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(ws_netstats_resource, test_http_service, "/", &ws_netstats_resource_detail);
-// #endif /* CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE */
-// #endif /* CONFIG_NET_SAMPLE_HTTP_SERVICE */
+HTTP_RESOURCE_DEFINE(ws_netstats_resource, test_http_service, "/", &ws_netstats_resource_detail);
+#endif /* CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE */
+#endif /* CONFIG_NET_SAMPLE_HTTP_SERVICE */
 
-// #if defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE)
-// #include "certificate.h"
+#if defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE)
+#include "certificate.h"
 
-// static const sec_tag_t sec_tag_list_verify_none[] = {
-// 		HTTP_SERVER_CERTIFICATE_TAG,
-// #if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
-// 		PSK_TAG,
-// #endif
-// 	};
+static const sec_tag_t sec_tag_list_verify_none[] = {
+		HTTP_SERVER_CERTIFICATE_TAG,
+#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
+		PSK_TAG,
+#endif
+	};
 
-// static uint16_t test_https_service_port = CONFIG_NET_SAMPLE_HTTPS_SERVER_SERVICE_PORT;
-// HTTPS_SERVICE_DEFINE(test_https_service, NULL, &test_https_service_port,
-// 		     CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL, sec_tag_list_verify_none,
-// 		     sizeof(sec_tag_list_verify_none));
+static uint16_t test_https_service_port = CONFIG_NET_SAMPLE_HTTPS_SERVER_SERVICE_PORT;
+HTTPS_SERVICE_DEFINE(test_https_service, NULL, &test_https_service_port,
+		     CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL, sec_tag_list_verify_none,
+		     sizeof(sec_tag_list_verify_none));
 
-// HTTP_RESOURCE_DEFINE(index_html_gz_resource_https, test_https_service, "/",
-// 		     &index_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(index_html_gz_resource_https, test_https_service, "/",
+		     &index_html_gz_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(main_js_gz_resource_https, test_https_service, "/main.js",
-// 		     &main_js_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(main_js_gz_resource_https, test_https_service, "/main.js",
+		     &main_js_gz_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(echo_resource_https, test_https_service, "/dynamic", &echo_resource_detail);
+HTTP_RESOURCE_DEFINE(echo_resource_https, test_https_service, "/dynamic", &echo_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(uptime_resource_https, test_https_service, "/uptime", &uptime_resource_detail);
+HTTP_RESOURCE_DEFINE(uptime_resource_https, test_https_service, "/uptime", &uptime_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(led_resource_https, test_https_service, "/led", &led_resource_detail);
+HTTP_RESOURCE_DEFINE(led_resource_https, test_https_service, "/led", &led_resource_detail);
 
-// #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
-// HTTP_RESOURCE_DEFINE(ws_echo_resource_https, test_https_service, "/ws_echo",
-// 		     &ws_echo_resource_detail);
+#if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
+HTTP_RESOURCE_DEFINE(ws_echo_resource_https, test_https_service, "/ws_echo",
+		     &ws_echo_resource_detail);
 
-// HTTP_RESOURCE_DEFINE(ws_netstats_resource_https, test_https_service, "/",
-// 		     &ws_netstats_resource_detail);
-// #endif /* CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE */
-// #endif /* CONFIG_NET_SAMPLE_HTTPS_SERVICE */
+HTTP_RESOURCE_DEFINE(ws_netstats_resource_https, test_https_service, "/",
+		     &ws_netstats_resource_detail);
+#endif /* CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE */
+#endif /* CONFIG_NET_SAMPLE_HTTPS_SERVICE */
 
-// static void setup_tls(void)
-// {
-// #if defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE)
-// #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-// 	int err;
+static void setup_tls(void)
+{
+#if defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE)
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	int err;
 
-// 	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
-// 				 TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
-// 				 server_certificate,
-// 				 sizeof(server_certificate));
-// 	if (err < 0) {
-// 		LOG_ERR("Failed to register public certificate: %d", err);
-// 	}
+	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
+				 TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
+				 server_certificate,
+				 sizeof(server_certificate));
+	if (err < 0) {
+		LOG_ERR("Failed to register public certificate: %d", err);
+	}
 
-// 	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
-// 				 TLS_CREDENTIAL_PRIVATE_KEY,
-// 				 private_key, sizeof(private_key));
-// 	if (err < 0) {
-// 		LOG_ERR("Failed to register private key: %d", err);
-// 	}
+	err = tls_credential_add(HTTP_SERVER_CERTIFICATE_TAG,
+				 TLS_CREDENTIAL_PRIVATE_KEY,
+				 private_key, sizeof(private_key));
+	if (err < 0) {
+		LOG_ERR("Failed to register private key: %d", err);
+	}
 
-// #if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
-// 	err = tls_credential_add(PSK_TAG,
-// 				 TLS_CREDENTIAL_PSK,
-// 				 psk,
-// 				 sizeof(psk));
-// 	if (err < 0) {
-// 		LOG_ERR("Failed to register PSK: %d", err);
-// 	}
+#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
+	err = tls_credential_add(PSK_TAG,
+				 TLS_CREDENTIAL_PSK,
+				 psk,
+				 sizeof(psk));
+	if (err < 0) {
+		LOG_ERR("Failed to register PSK: %d", err);
+	}
 
-// 	err = tls_credential_add(PSK_TAG,
-// 				 TLS_CREDENTIAL_PSK_ID,
-// 				 psk_id,
-// 				 sizeof(psk_id) - 1);
-// 	if (err < 0) {
-// 		LOG_ERR("Failed to register PSK ID: %d", err);
-// 	}
-// #endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED) */
-// #endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
-// #endif /* defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE) */
-// }
+	err = tls_credential_add(PSK_TAG,
+				 TLS_CREDENTIAL_PSK_ID,
+				 psk_id,
+				 sizeof(psk_id) - 1);
+	if (err < 0) {
+		LOG_ERR("Failed to register PSK ID: %d", err);
+	}
+#endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED) */
+#endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
+#endif /* defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE) */
+}
 
-// static int init_usb(void)
-// {
-// #if defined(CONFIG_USB_DEVICE_STACK_NEXT)
-// 	struct usbd_context *sample_usbd;
-// 	int err;
+static int init_usb(void)
+{
+#if defined(CONFIG_USB_DEVICE_STACK_NEXT)
+	struct usbd_context *sample_usbd;
+	int err;
 
-// 	sample_usbd = sample_usbd_init_device(NULL);
-// 	if (sample_usbd == NULL) {
-// 		return -ENODEV;
-// 	}
+	sample_usbd = sample_usbd_init_device(NULL);
+	if (sample_usbd == NULL) {
+		return -ENODEV;
+	}
 
-// 	err = usbd_enable(sample_usbd);
-// 	if (err) {
-// 		return err;
-// 	}
+	err = usbd_enable(sample_usbd);
+	if (err) {
+		return err;
+	}
 
-// 	(void)net_config_init_app(NULL, "Initializing network");
-// #endif /* CONFIG_USB_DEVICE_STACK_NEXT */
+	(void)net_config_init_app(NULL, "Initializing network");
+#endif /* CONFIG_USB_DEVICE_STACK_NEXT */
 
-// 	return 0;
-// }
+	return 0;
+}
 
 int main(void)
 {
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
@@ -546,15 +549,14 @@ int main(void)
 		.security = WIFI_SECURITY_TYPE_PSK,
 	};
 	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
+#else
+	init_usb();
+#endif
 	LOG_INF("Besme Allah");
-	// init_usb();
-
-	// setup_tls();
 	if (!device_is_ready(pwmsDev)) {
 		LOG_ERR("Device %s is not ready", pwmsDev->name);
 		return 0;
 	}
-	// http_server_start();
 	int err, pwmLevel;
 	pwmLevel = 50;
 	err = led_set_brightness(pwmsDev, FAN, pwmLevel);
@@ -577,6 +579,9 @@ int main(void)
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 		return 0;
 	}
+
+	// setup_tls();
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	pwmLevel = 40;
 	err = led_set_brightness(pwmsDev, GREEN0, pwmLevel);
 	LOG_INF("err=%d \n", err);
@@ -633,5 +638,7 @@ int main(void)
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
 		return 0;
 	}
+#endif
+	http_server_start();
 	return 0;
 }
