@@ -203,56 +203,56 @@ static void ws_echo_handler(void *ptr1, void *ptr2, void *ptr3)
 	cfg->sock = -1;
 }
 
-static int netstats_collect(char *buf, size_t maxlen)
-{
-	int ret;
-	struct net_stats data;
-	uint32_t bytes_recv = 0;
-	uint32_t bytes_sent = 0;
-	uint32_t ipv6_recv = 0;
-	uint32_t ipv6_sent = 0;
-	uint32_t ipv4_recv = 0;
-	uint32_t ipv4_sent = 0;
-	uint32_t tcp_recv = 0;
-	uint32_t tcp_sent = 0;
+// static int netstats_collect(char *buf, size_t maxlen)
+// {
+// 	int ret;
+// 	struct net_stats data;
+// 	uint32_t bytes_recv = 0;
+// 	uint32_t bytes_sent = 0;
+// 	uint32_t ipv6_recv = 0;
+// 	uint32_t ipv6_sent = 0;
+// 	uint32_t ipv4_recv = 0;
+// 	uint32_t ipv4_sent = 0;
+// 	uint32_t tcp_recv = 0;
+// 	uint32_t tcp_sent = 0;
 
-	net_mgmt(NET_REQUEST_STATS_GET_ALL, NULL, &data, sizeof(data));
+// 	net_mgmt(NET_REQUEST_STATS_GET_ALL, NULL, &data, sizeof(data));
 
-	const char *net_stats_json_template = "{"
-					      "\"bytes_recv\":%u,"
-					      "\"bytes_sent\":%u,"
-					      "\"ipv6_pkt_recv\":%u,"
-					      "\"ipv6_pkt_sent\":%u,"
-					      "\"ipv4_pkt_recv\":%u,"
-					      "\"ipv4_pkt_sent\":%u,"
-					      "\"tcp_bytes_recv\":%u,"
-					      "\"tcp_bytes_sent\":%u"
-					      "}";
+// 	const char *net_stats_json_template = "{"
+// 					      "\"bytes_recv\":%u,"
+// 					      "\"bytes_sent\":%u,"
+// 					      "\"ipv6_pkt_recv\":%u,"
+// 					      "\"ipv6_pkt_sent\":%u,"
+// 					      "\"ipv4_pkt_recv\":%u,"
+// 					      "\"ipv4_pkt_sent\":%u,"
+// 					      "\"tcp_bytes_recv\":%u,"
+// 					      "\"tcp_bytes_sent\":%u"
+// 					      "}";
 
-	bytes_recv = data.bytes.received;
-	bytes_sent = data.bytes.sent;
-#if defined(CONFIG_NET_STATISTICS_IPV6)
-	ipv6_recv = data.ipv6.recv;
-	ipv6_sent = data.ipv6.sent;
-#endif
-#if defined(CONFIG_NET_STATISTICS_IPV4)
-	ipv4_recv = data.ipv4.recv;
-	ipv4_sent = data.ipv4.sent;
-#endif
-#if defined(CONFIG_NET_STATISTICS_TCP)
-	tcp_recv = data.tcp.bytes.received;
-	tcp_sent = data.tcp.bytes.sent;
-#endif
+// 	bytes_recv = data.bytes.received;
+// 	bytes_sent = data.bytes.sent;
+// #if defined(CONFIG_NET_STATISTICS_IPV6)
+// 	ipv6_recv = data.ipv6.recv;
+// 	ipv6_sent = data.ipv6.sent;
+// #endif
+// #if defined(CONFIG_NET_STATISTICS_IPV4)
+// 	ipv4_recv = data.ipv4.recv;
+// 	ipv4_sent = data.ipv4.sent;
+// #endif
+// #if defined(CONFIG_NET_STATISTICS_TCP)
+// 	tcp_recv = data.tcp.bytes.received;
+// 	tcp_sent = data.tcp.bytes.sent;
+// #endif
 
-	ret = snprintf(buf, maxlen, net_stats_json_template, bytes_recv, bytes_sent, ipv6_recv,
-		       ipv6_sent, ipv4_recv, ipv4_sent, tcp_recv, tcp_sent);
-	if (ret >= maxlen) {
-		LOG_ERR("Net stats do not fit in buffer");
-		return -ENOSPC;
-	}
+// 	ret = snprintf(buf, maxlen, net_stats_json_template, bytes_recv, bytes_sent, ipv6_recv,
+// 		       ipv6_sent, ipv4_recv, ipv4_sent, tcp_recv, tcp_sent);
+// 	if (ret >= maxlen) {
+// 		LOG_ERR("Net stats do not fit in buffer");
+// 		return -ENOSPC;
+// 	}
 
-	return ret;
-}
+// 	return ret;
+// }
 
 #define WS_NETSTATS_STACK_SIZE 2048
 K_THREAD_STACK_DEFINE(ws_netstats_stack, WS_NETSTATS_STACK_SIZE);
@@ -265,11 +265,11 @@ static void netstats_handler(struct k_work *work)
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
 	struct ws_netstats_ctx *ctx = CONTAINER_OF(dwork, struct ws_netstats_ctx, work);
 
-	ret = netstats_collect(tx_buf, sizeof(tx_buf));
-	if (ret < 0) {
-		LOG_ERR("Unable to collect network statistics, err %d", ret);
-		goto unregister;
-	}
+	// ret = netstats_collect(tx_buf, sizeof(tx_buf));
+	// if (ret < 0) {
+	// 	LOG_ERR("Unable to collect network statistics, err %d", ret);
+	// 	goto unregister;
+	// }
 
 	ret = websocket_send_msg(ctx->sock, tx_buf, ret, WEBSOCKET_OPCODE_DATA_TEXT, false, true,
 				 SYS_FOREVER_MS);
