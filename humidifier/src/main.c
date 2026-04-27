@@ -100,14 +100,47 @@ struct rgbValues
 	uint8_t green;
 	uint8_t blue;
 };
-struct piezoCommand {
+struct PiezoStatus {
 	uint8_t piezoNum;
 	struct rgbValues led;
 	uint8_t intensity;
 };
 
-struct fanCommand {
+#define NUM_OF_PIEZOS	3
+struct PiezosStatus
+{
+	uint8_t active;
+	struct PiezoStatus piezos[NUM_OF_PIEZOS];
+};
+
+struct PiezosStatus piezosStatus = { 0 };
+
+struct FanStatus {
 	uint8_t speed;
+};
+
+struct FanStatus fanStatus = {0};
+struct Credentials
+{
+	const char *ssid;
+	const char *password;
+};
+
+struct Credentials credentials = {0};
+struct IpAddress
+{
+	const char *ip;
+};
+
+struct IpAddress ipAddress = { 0 };
+
+static const struct json_obj_descr ipAddressDescr[] = {
+	JSON_OBJ_DESCR_PRIM(struct IpAddress, ip, JSON_TOK_STRING),
+};
+
+static const struct json_obj_descr credentialsDescr[] = {
+	JSON_OBJ_DESCR_PRIM(struct Credentials, ssid, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct Credentials, password, JSON_TOK_STRING),
 };
 
 static const struct json_obj_descr rgbDescr[] = {
@@ -117,13 +150,18 @@ static const struct json_obj_descr rgbDescr[] = {
 };
 
 static const struct json_obj_descr piezoDescr[] = {
-    JSON_OBJ_DESCR_PRIM(struct piezoCommand, piezoNum, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_OBJECT(struct piezoCommand, led, rgbDescr),
-    JSON_OBJ_DESCR_PRIM(struct piezoCommand, intensity, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, piezoNum, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_OBJECT(struct PiezoStatus, led, rgbDescr),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, intensity, JSON_TOK_UINT),
 };
+// static const struct json_obj_descr piezosDescr[] = {
+//     JSON_OBJ_DESCR_PRIM(struct PiezosStatus, active, JSON_TOK_UINT),
+//     JSON_OBJ_DESCR_OBJ_ARRAY(struct PiezosStatus, piezos, NUM_OF_PIEZOS, NUM_OF_PIEZOS, piezoDescr, ARRAY_SIZE(piezoDescr)),
+// };
+
 
 static const struct json_obj_descr fanDescr[] = {
-	JSON_OBJ_DESCR_PRIM(struct fanCommand, speed, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct FanStatus, speed, JSON_TOK_UINT),
 };
 
 static uint8_t index_html_gz[] = {
@@ -240,9 +278,134 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 	.user_data = NULL,
 };
 
+
+static void parseIpAddressPost(uint8_t *buf, size_t len)
+{
+	struct IpAddress cmd;
+	int ret = json_obj_parse(buf, len, ipAddressDescr, ARRAY_SIZE(ipAddressDescr), &cmd);
+
+	if (ret < 0) {
+		LOG_ERR("Piezo JSON parse failed");
+		return;
+	}
+	LOG_INF("Set IP Address to: %s", cmd.ip);
+	// setIpAddress(cmd.ipAddress);
+}
+
+static int ipAddressHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static uint8_t postBuf[128];
+	static size_t cursor;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
+
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
+
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
+
+	cursor += requestCtx->data_len;
+
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		parseIpAddressPost(postBuf, cursor);
+		cursor = 0;
+	}
+
+	return 0;
+}
+
+static struct http_resource_detail_dynamic ipAddressResourceDetail = {
+	.common = {
+			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+		},
+	.cb = ipAddressHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(ipAddressResource,
+		     test_http_service,
+		     "/ipAddress",
+		     &ipAddressResourceDetail);
+
+
+static void parseCredentialsPost(uint8_t *buf, size_t len)
+{
+	struct Credentials cmd;
+	int ret = json_obj_parse(buf, len, credentialsDescr, ARRAY_SIZE(credentialsDescr), &cmd);
+
+	if (ret < 0) {
+		LOG_ERR("Credentials JSON parse failed");
+		return;
+	}
+	LOG_INF("Set credentials to ssid: %s, password: %s", cmd.ssid, cmd.password);
+	// setCredentials(cmd.ssid, cmd.password);
+}
+
+static int credentialsHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static uint8_t postBuf[128];
+	static size_t cursor;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
+
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
+
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
+
+	cursor += requestCtx->data_len;
+
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		parseCredentialsPost(postBuf, cursor);
+		cursor = 0;
+	}
+
+	return 0;
+}
+
+static struct http_resource_detail_dynamic credentialsResourceDetail = {
+	.common = {
+			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+		},
+	.cb = credentialsHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(credentialsResource,
+		     test_http_service,
+		     "/credentials",
+		     &credentialsResourceDetail);
+
+
 static void parsePiezosPost(uint8_t *buf, size_t len)
 {
-	struct piezoCommand cmd;
+	struct PiezoStatus cmd;
 	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
 
 	if (ret < 0) {
@@ -296,6 +459,23 @@ static int piezosHandler(struct http_client_ctx *client,
 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
 		parsePiezosPost(postBuf, cursor);
 		cursor = 0;
+		int ret;
+		static uint8_t piezosStatusBuf[128];
+
+		LOG_INF("piezos status %d", status);
+
+		/* A payload is not expected with the GET request. Ignore any data and wait until
+		* final callback before sending response
+		*/
+		// ret = json_obj_encode_buf(piezosDescr, ARRAY_SIZE(piezosDescr), piezosStatus, piezosStatusBuf, 128);
+		// if (ret < 0) {
+		// 	LOG_ERR("Failed to encode piezos, err %d", ret);
+		// 	return ret;
+		// }
+
+		// responseCtx->body = piezosStatusBuf;
+		// responseCtx->body_len = ret;
+		// responseCtx->final_chunk = true;
 	}
 
 	return 0;
@@ -317,7 +497,7 @@ HTTP_RESOURCE_DEFINE(piezosResource,
 
 static void parseFanPost(uint8_t *buf, size_t len)
 {
-	struct fanCommand cmd;
+	struct FanStatus cmd;
 
 	int ret = json_obj_parse(
 		buf,
@@ -368,6 +548,25 @@ static int fanHandler(struct http_client_ctx *client,
 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
 		parseFanPost(postBuf, cursor);
 		cursor = 0;
+
+		int ret;
+		static uint8_t fanStatusBuf[sizeof(STRINGIFY(INT64_MAX))];
+
+		LOG_INF("fan status %d", status);
+
+		/* A payload is not expected with the GET request. Ignore any data and wait until
+		* final callback before sending response
+		*/
+		ret = snprintf(fanStatusBuf, sizeof(fanStatusBuf), "%u", fanStatus.speed);
+		if (ret < 0) {
+			LOG_ERR("Failed to snprintf fan, err %d", ret);
+			return ret;
+		}
+
+		responseCtx->body = fanStatusBuf;
+		responseCtx->body_len = ret;
+		responseCtx->final_chunk = true;
+
 	}
 
 	return 0;
@@ -376,7 +575,7 @@ static int fanHandler(struct http_client_ctx *client,
 static struct http_resource_detail_dynamic fanResourceDetail = {
 	.common = {
 		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-		.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+		.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
 	},
 	.cb = fanHandler,
 	.user_data = NULL,
@@ -449,8 +648,8 @@ HTTP_RESOURCE_DEFINE(ws_netstats_resource, test_http_service, "/", &ws_netstats_
 
 static const sec_tag_t sec_tag_list_verify_none[] = {
 		HTTP_SERVER_CERTIFICATE_TAG,
-#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
-		PSK_TAG,
+#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_password_ENABLED)
+		password_TAG,
 #endif
 	};
 
@@ -501,23 +700,23 @@ static void setup_tls(void)
 		LOG_ERR("Failed to register private key: %d", err);
 	}
 
-#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED)
-	err = tls_credential_add(PSK_TAG,
-				 TLS_CREDENTIAL_PSK,
-				 psk,
-				 sizeof(psk));
+#if defined(CONFIG_MBEDTLS_KEY_EXCHANGE_password_ENABLED)
+	err = tls_credential_add(password_TAG,
+				 TLS_CREDENTIAL_password,
+				 password,
+				 sizeof(password));
 	if (err < 0) {
-		LOG_ERR("Failed to register PSK: %d", err);
+		LOG_ERR("Failed to register password: %d", err);
 	}
 
-	err = tls_credential_add(PSK_TAG,
-				 TLS_CREDENTIAL_PSK_ID,
-				 psk_id,
-				 sizeof(psk_id) - 1);
+	err = tls_credential_add(password_TAG,
+				 TLS_CREDENTIAL_password_ID,
+				 password_id,
+				 sizeof(password_id) - 1);
 	if (err < 0) {
-		LOG_ERR("Failed to register PSK ID: %d", err);
+		LOG_ERR("Failed to register password ID: %d", err);
 	}
-#endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED) */
+#endif /* defined(CONFIG_MBEDTLS_KEY_EXCHANGE_password_ENABLED) */
 #endif /* defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) */
 #endif /* defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE) */
 }
@@ -550,10 +749,14 @@ int main(void)
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
-		.ssid = "Naser-Wi-Fi",
-		.ssid_length = strlen("Naser-Wi-Fi"),
-		.psk = "1020151515",
-		.psk_length = strlen("1020151515"),
+		// .ssid = "Naser-Wi-Fi",
+		// .ssid_length = strlen("Naser-Wi-Fi"),
+		// .psk = "1020151515",
+		// .psk_length = strlen("1020151515"),
+		.ssid = "PAIDAR",
+		.ssid_length = strlen("PAIDAR"),
+		.psk = "Atal-Matal 347",
+		.psk_length = strlen("Atal-Matal 347"),
 		// .ssid = "Naser",
 		// .ssid_length = strlen("Naser"),
 		// .psk = "nasimore",
@@ -570,8 +773,8 @@ int main(void)
 		return 0;
 	}
 	int err, pwmLevel;
-	pwmLevel = 50;
-	err = led_set_brightness(pwmsDev, FAN, pwmLevel);
+	fanStatus.speed = 5;
+	err = led_set_brightness(pwmsDev, FAN, fanStatus.speed);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
