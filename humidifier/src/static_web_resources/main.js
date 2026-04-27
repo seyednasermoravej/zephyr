@@ -113,7 +113,7 @@ async function postFan() {
 // --- Network ---
 async function fetchNetworkCredentials() {
     try {
-        const res = await fetch("/network");
+        const res = await fetch("/credentials");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const ssidInput = document.getElementById("network-ssid");
@@ -139,7 +139,7 @@ async function saveNetworkCredentials() {
     statusEl.textContent = "";
 
     try {
-        const res = await fetch("/network", {
+        const res = await fetch("/credentials", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ssid, password })
@@ -221,6 +221,33 @@ function bindNetworkControls() {
 // ==========================================
 // 4. UPTIME FEATURE
 // ==========================================
+// async function fetchPiezos() {
+//     try {
+//         const res = await fetch("/piezoes");
+//         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+//         const json = await res.json();
+//         const el = document.getElementById("uptime");
+//         if (el) el.textContent = `Uptime: ${json} milliseconds`;
+//     } catch (e) { console.error("Uptime fetch error:", e.message); }
+// }
+
+async function fetchFan() {
+    try {
+        const res = await fetch("/fan");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const el = document.getElementById("fan_speed_slider");
+        if (el)
+        {
+            // console.log("fan speed:", fanState.speed);
+            // el.textContent = `${json}`;
+                        el.value = json;  // Update the slider's value directly
+        }
+        const el2 = document.getElementById("fan_speed_input");
+        if (el2) el2.value = json;
+    } catch (e) { console.error("fan speed fetch error:", e.message); }
+}
+
 async function fetchUptime() {
     try {
         const res = await fetch("/uptime");
@@ -274,5 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch initial data
     fetchNetworkCredentials();
     fetchUptime();
+    // fetchPiezoes();
+    fetchFan();
     setInterval(fetchUptime, 1000);
 });
