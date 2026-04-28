@@ -109,8 +109,9 @@ struct PiezoStatus {
 #define NUM_OF_PIEZOS	3
 struct PiezosStatus
 {
-	uint8_t active;
+	int8_t active;
 	struct PiezoStatus piezos[NUM_OF_PIEZOS];
+	uint8_t piezosNum;
 };
 
 struct PiezosStatus piezosStatus = { 0 };
@@ -154,10 +155,10 @@ static const struct json_obj_descr piezoDescr[] = {
     JSON_OBJ_DESCR_OBJECT(struct PiezoStatus, led, rgbDescr),
     JSON_OBJ_DESCR_PRIM(struct PiezoStatus, intensity, JSON_TOK_UINT),
 };
-// static const struct json_obj_descr piezosDescr[] = {
-//     JSON_OBJ_DESCR_PRIM(struct PiezosStatus, active, JSON_TOK_UINT),
-//     JSON_OBJ_DESCR_OBJ_ARRAY(struct PiezosStatus, piezos, NUM_OF_PIEZOS, NUM_OF_PIEZOS, piezoDescr, ARRAY_SIZE(piezoDescr)),
-// };
+static const struct json_obj_descr piezosDescr[] = {
+    JSON_OBJ_DESCR_PRIM(struct PiezosStatus, active, JSON_TOK_INT),
+    JSON_OBJ_DESCR_OBJ_ARRAY(struct PiezosStatus, piezos, NUM_OF_PIEZOS, piezosNum, piezoDescr, ARRAY_SIZE(piezoDescr)),
+};
 
 
 static const struct json_obj_descr fanDescr[] = {
@@ -467,15 +468,15 @@ static int piezosHandler(struct http_client_ctx *client,
 		/* A payload is not expected with the GET request. Ignore any data and wait until
 		* final callback before sending response
 		*/
-		// ret = json_obj_encode_buf(piezosDescr, ARRAY_SIZE(piezosDescr), piezosStatus, piezosStatusBuf, 128);
-		// if (ret < 0) {
-		// 	LOG_ERR("Failed to encode piezos, err %d", ret);
-		// 	return ret;
-		// }
+		ret = json_obj_encode_buf(piezosDescr, ARRAY_SIZE(piezosDescr), &piezosStatus, piezosStatusBuf, 128);
+		if (ret < 0) {
+			LOG_ERR("Failed to encode piezos, err %d", ret);
+			return ret;
+		}
 
-		// responseCtx->body = piezosStatusBuf;
-		// responseCtx->body_len = ret;
-		// responseCtx->final_chunk = true;
+		responseCtx->body = piezosStatusBuf;
+		responseCtx->body_len = ret;
+		responseCtx->final_chunk = true;
 	}
 
 	return 0;
@@ -743,6 +744,52 @@ static int init_usb(void)
 	return 0;
 }
 
+struct Settings
+{
+	struct PiezosStatus piezos;
+	struct FanStatus fan;
+	struct Credentials credentials;
+
+};
+
+struct Settings settings = { 0 };
+
+void setDefaultSettings(struct Settings *s)
+{
+	strcpy(s->credentials.ssid,"Humidifer");
+	strcpy(s->credentials.password,"12345678");
+	s->fan.speed = 50;
+	s->piezos.active = -1;
+	s->piezos.piezosNum = 3;
+	s->piezos.piezos[0].intensity = 50;
+	s->piezos.piezos[0].led.red = 50;
+	s->piezos.piezos[0].led.green = 50;
+	s->piezos.piezos[0].led.blue = 50;
+	s->piezos.piezos[1].intensity = 50;
+	s->piezos.piezos[1].led.red = 50;
+	s->piezos.piezos[1].led.green = 50;
+	s->piezos.piezos[1].led.blue = 50;
+	s->piezos.piezos[2].intensity = 50;
+	s->piezos.piezos[2].led.red = 50;
+	s->piezos.piezos[2].led.green = 50;
+	s->piezos.piezos[2].led.blue = 50;
+}
+void loadSettings()
+{
+	// it should read the values from the nv memory otherwise eveything loads to default value.
+	int ret = 0;
+	if (ret > 0)
+	{
+		memcpy();
+	}
+	else
+	{
+		setDefaultSettings(&settings);
+	}
+}
+
+
+
 int main(void)
 {
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
@@ -768,37 +815,38 @@ int main(void)
 	init_usb();
 #endif
 	LOG_INF("Besme Allah");
+	loadSettings();
 	if (!device_is_ready(pwmsDev)) {
 		LOG_ERR("Device %s is not ready", pwmsDev->name);
 		return 0;
 	}
-	int err, pwmLevel;
+	int err;
 	fanStatus.speed = 5;
 	err = led_set_brightness(pwmsDev, FAN, fanStatus.speed);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		LOG_ERR("err=%d brightness=%d\n", err, fanStatus.speed);
 		return 0;
 	}
-	pwmLevel = 20;
-	err = led_set_brightness(pwmsDev, PIEZO, pwmLevel);
+	piezosStatus.piezos[0].intensity = 20;
+	err = led_set_brightness(pwmsDev, PIEZO, piezosStatus.piezos[0].intensity);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		LOG_ERR("err=%d brightness=%d\n", err, piezosStatus.piezos[0].intensity);
 		return 0;
 	}
-	pwmLevel = 30;
-	err = led_set_brightness(pwmsDev, RED0, pwmLevel);
+	piezosStatus.piezos[0].led.red = 30;
+	err = led_set_brightness(pwmsDev, RED0, piezosStatus.piezos[0].led.red);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		LOG_ERR("err=%d brightness=%d\n", err, piezosStatus.piezos[0].led.red);
 		return 0;
 	}
-	pwmLevel = 40;
-	err = led_set_brightness(pwmsDev, GREEN0, pwmLevel);
+	piezosStatus.piezos[0].led.green = 40;
+	err = led_set_brightness(pwmsDev, GREEN0, piezosStatus.piezos[0].led.green);
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
-		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
+		LOG_ERR("err=%d brightness=%d\n", err, piezosStatus.piezos[0].led.green);
 		return 0;
 	}
 
