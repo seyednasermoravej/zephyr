@@ -37,7 +37,9 @@ add_custom_target(sample_server_cert
 
 option(INCLUDE_HTML_CONTENT "Include the HTML content" ON)
 
-target_sources(app PRIVATE src/main.c)
+target_include_directories(app PRIVATE inc)
+FILE(GLOB app_sources src/*.c src/*.cpp)
+target_sources(app PRIVATE ${app_sources})
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated/)
 

@@ -5,7 +5,9 @@
  */
 
 #include <zephyr/net/http/server.h>
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 /**
  * @brief Setup websocket for echoing data back to client
  *
@@ -27,3 +29,6 @@ int ws_echo_setup(int ws_socket, struct http_request_ctx *request_ctx, void *use
  * @return 0 on success
  */
 int ws_netstats_setup(int ws_socket, struct http_request_ctx *request_ctx, void *user_data);
+#ifdef __cplusplus
+}
+#endif
