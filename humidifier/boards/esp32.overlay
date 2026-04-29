@@ -51,6 +51,7 @@
 			pwms = <&ledc0 10 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
 		};
 	};
+
 	buttons
 	{
 		compatible = "gpio-keys";
