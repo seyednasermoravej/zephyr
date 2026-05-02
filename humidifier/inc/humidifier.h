@@ -90,6 +90,18 @@ struct IpAddress
 	const char *ip;
 };
 
+struct Settings
+{
+	// uint64_t uptime;
+	uint8_t fanSpeed = 50;
+	// struct PiezosStatus piezos = { 0 };
+	// struct IpAddress ipAddress = { 0 };
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
+	struct Credentials credentials = { 0 };
+#endif
+
+};
+
 static const struct json_obj_descr ipAddressDescr[] = {
 	JSON_OBJ_DESCR_PRIM(struct IpAddress, ip, JSON_TOK_STRING),
 };
@@ -120,38 +132,36 @@ static const struct json_obj_descr fanDescr[] = {
 	JSON_OBJ_DESCR_PRIM(struct FanStatus, speed, JSON_TOK_UINT),
 };
 
+// static const struct json_obj_descr settingsDescr[] = {
+// 	JSON_OBJ_DESCR_PRIM(struct Settings, uptime, JSON_TOK_UINT64),
+// 	JSON_OBJ_DESCR_PRIM(struct Settings, fanSpeed, JSON_TOK_UINT),
+// 	JSON_OBJ_DESCR_OBJECT(struct Settings, piezos, piezosDescr),
+
+// };
+
 #define NVS_SETTINGS_ID 0
 
-struct Settings
-{
-	uint8_t fanSpeed = 50;
-#ifdef CONFIG_BOARD_ESP32_DEVKITC
-	struct Credentials credentials = { 0 };
-#endif
-	struct PiezosStatus piezos = { 0 };
-	struct IpAddress ipAddress = { 0 };
 
-
-};
 class Humidifier
 {
 public:
 	Humidifier();
-	void parsePiezosPost(char *buf, size_t len);
-	void parseFanPost(char *buf, size_t len);
-	void parseCredentialsPost(char *buf, size_t len);
-	void parseIpAddressPost(char *buf, size_t len);
+	// void parsePiezosPost(char *buf, size_t len);
+	// void parseFanPost(char *buf, size_t len);
+	// // void parseCredentialsPost(char *buf, size_t len);
+	// void parseIpAddressPost(char *buf, size_t len);
+	// int fanStatus(char *buf, size_t bufSize);
 
-	static void buttonsHandlerWrapper(struct input_event *val, void* userData);
-	void buttonsHandler(struct input_event *val);
+	// static void buttonsHandlerWrapper(struct input_event *val, void* userData);
+	// void buttonsHandler(struct input_event *val);
 
 private:
 	struct Settings settings;
-	struct nvs_fs *fs;
+	// struct nvs_fs *fs;
 
-	int readInfosFromMemory();
-	int nvsInit();
-	void setDefaultSettings();
+	// int readInfosFromMemory();
+	// int nvsInit();
+	// void setDefaultSettings();
 
 
 };
