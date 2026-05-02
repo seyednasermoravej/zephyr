@@ -3,9 +3,10 @@
 // ==========================================
 function createPiezoPanelHTML(piezoIndex) {
     const channels = [
-        { name: 'red', class: 'red', label: 'Red' },
-        { name: 'green', class: 'green', label: 'Green' },
-        { name: 'blue', class: 'blue', label: 'Blue' },
+        { name: 'red', class: 'red', label: 'Brightness' },
+        // { name: 'red', class: 'red', label: 'Red' },
+        // { name: 'green', class: 'green', label: 'Green' },
+        // { name: 'blue', class: 'blue', label: 'Blue' },
         { name: 'intensity', class: 'intensity', label: 'Piezo Power' }
     ];
 
@@ -27,8 +28,53 @@ function createPiezoPanelHTML(piezoIndex) {
     }).join('');
 
     return `
-    <div class="piezo-panel">
-        <div class="piezo-title">Piezo ${piezoIndex} <span class="piezo-preview" id="preview_${piezoIndex}"></span></div>
+     <div class="piezo-panel">
+        <div class="piezo-title">
+            Piezo ${piezoIndex}
+            <span class="piezo-preview" id="preview_${piezoIndex}"></span>
+        </div>
+
+        <!-- MODE (RADIO BUTTONS) -->
+        <div class="piezo-mode">
+            <label><strong>Mode:</strong></label>
+
+            <label>
+                <input type="radio" name="mode_${piezoIndex}" value="off" data-piezo="${piezoIndex}">
+                Off
+            </label>
+
+            <label>
+                <input type="radio" name="mode_${piezoIndex}" value="manual" data-piezo="${piezoIndex}" checked>
+                Manual
+            </label>
+
+            <label>
+                <input type="radio" name="mode_${piezoIndex}" value="schedule" data-piezo="${piezoIndex}">
+                Scheduling
+            </label>
+
+            <!-- SCHEDULE INPUTS -->
+            <div id="schedule_${piezoIndex}" style="margin-top:10px;">
+                <label>Start:</label>
+                <input
+                    type="time"
+                    step="60"
+                    min="00:00"
+                    max="23:59"
+                    data-piezo="${piezoIndex}"
+                    class="schedule-start">
+
+                <label>End:</label>
+                <input
+                    type="time"
+                    step="60"
+                    min="00:00"
+                    max="23:59"
+                    data-piezo="${piezoIndex}"
+                    class="schedule-end">
+            </div>
+        </div>
+
         ${rowsHTML}
     </div>`;
 }
@@ -68,10 +114,11 @@ function updatePreview(piezoIndex) {
     if (!state) return;
     const { led } = state;
     const r = Math.round(led.red * 2.55);
-    const g = Math.round(led.green * 2.55);
-    const b = Math.round(led.blue * 2.55);
+    // const g = Math.round(led.green * 2.55);
+    // const b = Math.round(led.blue * 2.55);
     const preview = document.getElementById(`preview_${piezoIndex}`);
-    if (preview) preview.style.background = `rgb(${r},${g},${b})`;
+    if (preview) preview.style.background = `rgb(${r},0,0)`;
+    // if (preview) preview.style.background = `rgb(${r},${g},${b})`;
 }
 
 async function postPiezo(piezoIndex) {
@@ -83,8 +130,10 @@ async function postPiezo(piezoIndex) {
                 piezoNum: parseInt(piezoIndex, 10),
                 led: {
                     red: Math.round(piezosState[piezoIndex].led.red * 2.55),
-                    green: Math.round(piezosState[piezoIndex].led.green * 2.55),
-                    blue: Math.round(piezosState[piezoIndex].led.blue * 2.55)
+                    // green: Math.round(piezosState[piezoIndex].led.green * 2.55),
+                    // blue: Math.round(piezosState[piezoIndex].led.blue * 2.55)
+                    green: 0,
+                    blue: 0
                 },
                 intensity: piezosState[piezoIndex].intensity
             })
@@ -235,16 +284,14 @@ async function fetchFan() {
     try {
         const res = await fetch("/fan");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const json = await res.json();
-        const el = document.getElementById("fan_speed_slider");
-        if (el)
-        {
-            // console.log("fan speed:", fanState.speed);
-            // el.textContent = `${json}`;
-                        el.value = json;  // Update the slider's value directly
-        }
-        const el2 = document.getElementById("fan_speed_input");
-        if (el2) el2.value = json;
+
+        const slider = document.getElementById("fan_speed_slider");
+        const input = document.getElementById("fan_speed_input");
+
+        if(slider) slider.value = json.speed
+        if(input) input.value = json.speed
     } catch (e) { console.error("fan speed fetch error:", e.message); }
 }
 
@@ -299,9 +346,10 @@ document.addEventListener("DOMContentLoaded", () => {
     [0, 1, 2].forEach(updatePreview);
 
     // Fetch initial data
-    fetchNetworkCredentials();
+    // fetchNetworkCredentials();
     fetchUptime();
     // fetchPiezoes();
     fetchFan();
     setInterval(fetchUptime, 1000);
+    setInterval(fetchFan, 1000);
 });

@@ -27,6 +27,7 @@
 
 #if CONFIG_USB_DEVICE_STACK_NEXT
 #include <sample_usbd.h>
+extern "C" struct usbd_context *sample_usbd_init_device(usbd_msg_cb_t msg_cb);
 #endif
 
 #include "ws.h"
@@ -34,10 +35,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_http_server_sample, LOG_LEVEL_INF);
 
-
-
-
-Humidifier *humidifier = nullptr;
+static Humidifier *humidifier = nullptr;
 
 static uint8_t index_html_gz[] = {
 #include "index.html.gz.inc"
@@ -52,7 +50,7 @@ struct http_resource_detail_static index_html_gz_resource_detail = {
 			.bitmask_of_supported_http_methods = BIT(HTTP_GET),
 			.type = HTTP_RESOURCE_TYPE_STATIC,
 			.content_encoding = "gzip",
-			.content_type = "text/javascript",
+			.content_type = "text/html",
 	},
 	.static_data = index_html_gz,
 	.static_data_len = sizeof(index_html_gz),
@@ -157,203 +155,226 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 
 
 
-static int ipAddressHandler(struct http_client_ctx *client,
-		      enum http_transaction_status status,
-		      const struct http_request_ctx *requestCtx,
-		      struct http_response_ctx *responseCtx,
-		      void *userData)
-{
-	static char postBuf[128];
-	static size_t cursor;
+// static int ipAddressHandler(struct http_client_ctx *client,
+// 		      enum http_transaction_status status,
+// 		      const struct http_request_ctx *requestCtx,
+// 		      struct http_response_ctx *responseCtx,
+// 		      void *userData)
+// {
+// 	static char postBuf[128];
+// 	static size_t cursor;
 
-	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-		cursor = 0;
-		return 0;
-	}
+// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+// 		cursor = 0;
+// 		return 0;
+// 	}
 
-	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-		cursor = 0;
-		return -ENOMEM;
-	}
+// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+// 		cursor = 0;
+// 		return -ENOMEM;
+// 	}
 
-	memcpy(postBuf + cursor,
-	       requestCtx->data,
-	       requestCtx->data_len);
+// 	memcpy(postBuf + cursor,
+// 	       requestCtx->data,
+// 	       requestCtx->data_len);
 
-	cursor += requestCtx->data_len;
+// 	cursor += requestCtx->data_len;
 
-	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		humidifier->parseIpAddressPost(postBuf, cursor);
-		cursor = 0;
-	}
+// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+// 		// humidifier->parseIpAddressPost(postBuf, cursor);
+// 		cursor = 0;
+// 	}
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static struct http_resource_detail_dynamic ipAddressResourceDetail = {
-	.common = {
-			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-		},
-	.cb = ipAddressHandler,
-	.user_data = NULL,
-};
+// static struct http_resource_detail_dynamic ipAddressResourceDetail = {
+// 	.common = {
+// 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+// 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+// 		},
+// 	.cb = ipAddressHandler,
+// 	.user_data = NULL,
+// };
 
-HTTP_RESOURCE_DEFINE(ipAddressResource,
-		     test_http_service,
-		     "/ipAddress",
-		     &ipAddressResourceDetail);
-
-
-
-static int credentialsHandler(struct http_client_ctx *client,
-		      enum http_transaction_status status,
-		      const struct http_request_ctx *requestCtx,
-		      struct http_response_ctx *responseCtx,
-		      void *userData)
-{
-	static char postBuf[128];
-	static size_t cursor;
-
-	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-		cursor = 0;
-		return 0;
-	}
-
-	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-		cursor = 0;
-		return -ENOMEM;
-	}
-
-	memcpy(postBuf + cursor,
-	       requestCtx->data,
-	       requestCtx->data_len);
-
-	cursor += requestCtx->data_len;
-
-	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		humidifier->parseCredentialsPost(postBuf, cursor);
-		cursor = 0;
-	}
-
-	return 0;
-}
-
-static struct http_resource_detail_dynamic credentialsResourceDetail = {
-	.common = {
-			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-		},
-	.cb = credentialsHandler,
-	.user_data = NULL,
-};
-
-HTTP_RESOURCE_DEFINE(credentialsResource,
-		     test_http_service,
-		     "/credentials",
-		     &credentialsResourceDetail);
+// HTTP_RESOURCE_DEFINE(ipAddressResource,
+// 		     test_http_service,
+// 		     "/ipAddress",
+// 		     &ipAddressResourceDetail);
 
 
 
-static int piezosHandler(struct http_client_ctx *client,
-		      enum http_transaction_status status,
-		      const struct http_request_ctx *requestCtx,
-		      struct http_response_ctx *responseCtx,
-		      void *userData)
-{
-	static char postBuf[128];
-	static size_t cursor;
+// static int credentialsHandler(struct http_client_ctx *client,
+// 		      enum http_transaction_status status,
+// 		      const struct http_request_ctx *requestCtx,
+// 		      struct http_response_ctx *responseCtx,
+// 		      void *userData)
+// {
+// 	static char postBuf[128];
+// 	static size_t cursor;
 
-	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-		cursor = 0;
-		return 0;
-	}
+// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+// 		cursor = 0;
+// 		return 0;
+// 	}
 
-	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-		cursor = 0;
-		return -ENOMEM;
-	}
+// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+// 		cursor = 0;
+// 		return -ENOMEM;
+// 	}
 
-	memcpy(postBuf + cursor,
-	       requestCtx->data,
-	       requestCtx->data_len);
+// 	memcpy(postBuf + cursor,
+// 	       requestCtx->data,
+// 	       requestCtx->data_len);
 
-	cursor += requestCtx->data_len;
+// 	cursor += requestCtx->data_len;
 
-	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		humidifier->parsePiezosPost(postBuf, cursor);
-		cursor = 0;
-	}
+// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+// 		humidifier->parseCredentialsPost(postBuf, cursor);
+// 		cursor = 0;
+// 	}
 
-	return 0;
-}
-static struct http_resource_detail_dynamic piezosResourceDetail = {
-	.common = {
-			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-		},
-	.cb = piezosHandler,
-	.user_data = NULL,
-};
+// 	return 0;
+// }
 
-HTTP_RESOURCE_DEFINE(piezosResource,
-		     test_http_service,
-		     "/piezos",
-		     &piezosResourceDetail);
+// static struct http_resource_detail_dynamic credentialsResourceDetail = {
+// 	.common = {
+// 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+// 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+// 		},
+// 	.cb = credentialsHandler,
+// 	.user_data = NULL,
+// };
+
+// HTTP_RESOURCE_DEFINE(credentialsResource,
+// 		     test_http_service,
+// 		     "/credentials",
+// 		     &credentialsResourceDetail);
 
 
 
-static int fanHandler(struct http_client_ctx *client,
-		      enum http_transaction_status status,
-		      const struct http_request_ctx *requestCtx,
-		      struct http_response_ctx *responseCtx,
-		      void *userData)
-{
-	static char postBuf[32];
-	static size_t cursor;
+// static int piezosHandler(struct http_client_ctx *client,
+// 		      enum http_transaction_status status,
+// 		      const struct http_request_ctx *requestCtx,
+// 		      struct http_response_ctx *responseCtx,
+// 		      void *userData)
+// {
+// 	static char postBuf[128];
+// 	static size_t cursor;
 
-	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-		cursor = 0;
-		return 0;
-	}
+// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+// 		cursor = 0;
+// 		return 0;
+// 	}
 
-	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-		cursor = 0;
-		return -ENOMEM;
-	}
+// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+// 		cursor = 0;
+// 		return -ENOMEM;
+// 	}
 
-	memcpy(postBuf + cursor,
-	       requestCtx->data,
-	       requestCtx->data_len);
+// 	memcpy(postBuf + cursor,
+// 	       requestCtx->data,
+// 	       requestCtx->data_len);
 
-	cursor += requestCtx->data_len;
+// 	cursor += requestCtx->data_len;
 
-	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		humidifier->parseFanPost(postBuf, cursor);
-		cursor = 0;
-	}
+// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+// 		// humidifier->parsePiezosPost(postBuf, cursor);
+// 		cursor = 0;
+// 	}
 
-	return 0;
-}
+// 	return 0;
+// }
+// static struct http_resource_detail_dynamic piezosResourceDetail = {
+// 	.common = {
+// 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+// 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+// 		},
+// 	.cb = piezosHandler,
+// 	.user_data = NULL,
+// };
 
-static struct http_resource_detail_dynamic fanResourceDetail = {
-	.common = {
-		.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
-		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-	},
-	.cb = fanHandler,
-	.user_data = NULL,
-};
+// HTTP_RESOURCE_DEFINE(piezosResource,
+// 		     test_http_service,
+// 		     "/piezos",
+// 		     &piezosResourceDetail);
 
-HTTP_RESOURCE_DEFINE(
-	fanResource,
-	test_http_service,
-	"/fan",
-	&fanResourceDetail);
+
+
+// static int fanHandler(struct http_client_ctx *client,
+// 		      enum http_transaction_status status,
+// 		      const struct http_request_ctx *requestCtx,
+// 		      struct http_response_ctx *responseCtx,
+// 		      void *userData)
+// {
+// 	static char postBuf[32];
+// 	static size_t cursor;
+
+//     // --- GET: Return current fan status ---
+// 	if (client->method == HTTP_GET) {
+// 		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+// 			int ret = 0;
+// 			// ret = humidifier->fanStatus(postBuf, sizeof(postBuf));
+// 			if(ret < 0)
+// 			{
+// 				return ret;
+// 			}
+// 			responseCtx->body = (uint8_t *)postBuf;
+// 			responseCtx->body_len = strlen(postBuf);
+// 			responseCtx->final_chunk = true;
+// 		}
+// 		return 0;
+// 	}
+//     	if(client->method == HTTP_GET)
+// 	{
+
+// 	}
+// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+// 		cursor = 0;
+// 		return 0;
+// 	}
+
+// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+// 		cursor = 0;
+// 		return -ENOMEM;
+// 	}
+
+// 	memcpy(postBuf + cursor,
+// 	       requestCtx->data,
+// 	       requestCtx->data_len);
+
+// 	cursor += requestCtx->data_len;
+
+// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+// 		// humidifier->parseFanPost(postBuf, cursor);
+// 		cursor = 0;
+// 		// humidifier->fanStatus(postBuf, 32);
+// 		responseCtx->body = (uint8_t *)postBuf;
+// 		responseCtx->body_len = strlen(postBuf);
+// 		responseCtx->final_chunk = true;
+// 	}
+
+// 	return 0;
+// }
+
+// static struct http_resource_detail_dynamic fanResourceDetail = {
+// 	.common = {
+// 		.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
+// 		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+// 	},
+// 	.cb = fanHandler,
+// 	.user_data = NULL,
+// };
+
+// HTTP_RESOURCE_DEFINE(
+// 	fanResource,
+// 	test_http_service,
+// 	"/fan",
+// 	&fanResourceDetail);
 
 
 
@@ -489,7 +510,6 @@ static void setup_tls(void)
 #endif /* defined(CONFIG_NET_SAMPLE_HTTPS_SERVICE) */
 }
 
-extern "C" struct usbd_context *sample_usbd_init_device(usbd_msg_cb_t msg_cb);
 static int init_usb(void)
 {
 #if defined(CONFIG_USB_DEVICE_STACK_NEXT)
@@ -519,14 +539,14 @@ int main(void)
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
-		// .ssid = "Naser-Wi-Fi",
-		// .ssid_length = strlen("Naser-Wi-Fi"),
-		// .psk = "1020151515",
-		// .psk_length = strlen("1020151515"),
-		.ssid = "PAIDAR",
-		.ssid_length = strlen("PAIDAR"),
-		.psk = "Atal-Matal 347",
-		.psk_length = strlen("Atal-Matal 347"),
+		.ssid = (uint8_t *)"Naser-Wi-Fi",
+		.ssid_length = strlen("Naser-Wi-Fi"),
+		.psk = (uint8_t *)"1020151515",
+		.psk_length = strlen("1020151515"),
+		// .ssid = "PAIDAR",
+		// .ssid_length = strlen("PAIDAR"),
+		// .psk = "Atal-Matal 347",
+		// .psk_length = strlen("Atal-Matal 347"),
 		// .ssid = "Naser",
 		// .ssid_length = strlen("Naser"),
 		// .psk = "nasimore",
@@ -538,7 +558,8 @@ int main(void)
 	init_usb();
 #endif
 	LOG_INF("Besme Allah");
-	humidifier = new Humidifier;
+	LOG_INF("sizeof Humidifier is: %d", sizeof(Humidifier));
+	humidifier = new Humidifier();
 
 	// int err;
 	http_server_start();
