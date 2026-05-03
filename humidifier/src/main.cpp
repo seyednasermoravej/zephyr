@@ -261,17 +261,19 @@ static int piezosHandler(struct http_client_ctx *client,
 		      struct http_response_ctx *responseCtx,
 		      void *userData)
 {
-	static char postBuf[256];
+	static char postBuf[256] = { 0 };
 	static size_t cursor;
 
 	if (client->method == HTTP_GET) {
 		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-		int len = humidifier->piezosStatus(postBuf, sizeof(postBuf));
-		if (len > 0) {
-			responseCtx->body = (uint8_t *)postBuf;
-			responseCtx->body_len = len;
-			responseCtx->final_chunk = true;
-		}
+			int len = humidifier->piezosStatus(postBuf, sizeof(postBuf));
+			if (len == 0) {
+				responseCtx->body = (uint8_t *)postBuf;
+				responseCtx->body_len = strlen(postBuf);
+				responseCtx->final_chunk = true;
+			}
+			LOG_DBG("json char is: %s", postBuf);
+			LOG_DBG("json buf is: %s", responseCtx->body);
 		}
 		return 0;
 	}
