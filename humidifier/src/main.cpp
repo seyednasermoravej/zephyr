@@ -255,126 +255,141 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 
 
 
-// static int piezosHandler(struct http_client_ctx *client,
-// 		      enum http_transaction_status status,
-// 		      const struct http_request_ctx *requestCtx,
-// 		      struct http_response_ctx *responseCtx,
-// 		      void *userData)
-// {
-// 	static char postBuf[128];
-// 	static size_t cursor;
+static int piezosHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static char postBuf[256];
+	static size_t cursor;
 
-// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-// 		cursor = 0;
-// 		return 0;
-// 	}
+	if (client->method == HTTP_GET) {
+		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		int len = humidifier->piezosStatus(postBuf, sizeof(postBuf));
+		if (len > 0) {
+			responseCtx->body = (uint8_t *)postBuf;
+			responseCtx->body_len = len;
+			responseCtx->final_chunk = true;
+		}
+		}
+		return 0;
+	}
 
-// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-// 		cursor = 0;
-// 		return -ENOMEM;
-// 	}
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
 
-// 	memcpy(postBuf + cursor,
-// 	       requestCtx->data,
-// 	       requestCtx->data_len);
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
 
-// 	cursor += requestCtx->data_len;
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
 
-// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-// 		// humidifier->parsePiezosPost(postBuf, cursor);
-// 		cursor = 0;
-// 	}
+	cursor += requestCtx->data_len;
 
-// 	return 0;
-// }
-// static struct http_resource_detail_dynamic piezosResourceDetail = {
-// 	.common = {
-// 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-// 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-// 		},
-// 	.cb = piezosHandler,
-// 	.user_data = NULL,
-// };
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		humidifier->parsePiezosPost(postBuf, cursor);
+		cursor = 0;
+		humidifier->piezosStatus(postBuf, sizeof(postBuf));
+		responseCtx->body = (uint8_t *)postBuf;
+		responseCtx->body_len = strlen(postBuf);
+		responseCtx->final_chunk = true;
+	}
 
-// HTTP_RESOURCE_DEFINE(piezosResource,
-// 		     test_http_service,
-// 		     "/piezos",
-// 		     &piezosResourceDetail);
+	return 0;
+}
+static struct http_resource_detail_dynamic piezosResourceDetail = {
+	.common = {
+			.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		},
+	.cb = piezosHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(piezosResource,
+		     test_http_service,
+		     "/piezos",
+		     &piezosResourceDetail);
 
 
 
-// static int fanHandler(struct http_client_ctx *client,
-// 		      enum http_transaction_status status,
-// 		      const struct http_request_ctx *requestCtx,
-// 		      struct http_response_ctx *responseCtx,
-// 		      void *userData)
-// {
-// 	static char postBuf[32];
-// 	static size_t cursor;
+static int fanHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static char postBuf[32];
+	static size_t cursor;
 
-//     // --- GET: Return current fan status ---
-// 	if (client->method == HTTP_GET) {
-// 		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-// 			int ret = 0;
-// 			// ret = humidifier->fanStatus(postBuf, sizeof(postBuf));
-// 			if(ret < 0)
-// 			{
-// 				return ret;
-// 			}
-// 			responseCtx->body = (uint8_t *)postBuf;
-// 			responseCtx->body_len = strlen(postBuf);
-// 			responseCtx->final_chunk = true;
-// 		}
-// 		return 0;
-// 	}
-//     	if(client->method == HTTP_GET)
-// 	{
+    // --- GET: Return current fan status ---
+	if (client->method == HTTP_GET) {
+		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+			int ret = 0;
+			ret = humidifier->fanStatus(postBuf, sizeof(postBuf));
+			if(ret < 0)
+			{
+				return ret;
+			}
+			responseCtx->body = (uint8_t *)postBuf;
+			responseCtx->body_len = strlen(postBuf);
+			responseCtx->final_chunk = true;
+		}
+		return 0;
+	}
+    	if(client->method == HTTP_GET)
+	{
 
-// 	}
-// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-// 		cursor = 0;
-// 		return 0;
-// 	}
+	}
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
 
-// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-// 		cursor = 0;
-// 		return -ENOMEM;
-// 	}
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
 
-// 	memcpy(postBuf + cursor,
-// 	       requestCtx->data,
-// 	       requestCtx->data_len);
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
 
-// 	cursor += requestCtx->data_len;
+	cursor += requestCtx->data_len;
 
-// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-// 		// humidifier->parseFanPost(postBuf, cursor);
-// 		cursor = 0;
-// 		// humidifier->fanStatus(postBuf, 32);
-// 		responseCtx->body = (uint8_t *)postBuf;
-// 		responseCtx->body_len = strlen(postBuf);
-// 		responseCtx->final_chunk = true;
-// 	}
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		humidifier->parseFanPost(postBuf, cursor);
+		cursor = 0;
+		responseCtx->body = (uint8_t *)postBuf;
+		responseCtx->body_len = strlen(postBuf);
+		responseCtx->final_chunk = true;
+	}
 
-// 	return 0;
-// }
+	return 0;
+}
 
-// static struct http_resource_detail_dynamic fanResourceDetail = {
-// 	.common = {
-// 		.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
-// 		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-// 	},
-// 	.cb = fanHandler,
-// 	.user_data = NULL,
-// };
+static struct http_resource_detail_dynamic fanResourceDetail = {
+	.common = {
+		.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+	},
+	.cb = fanHandler,
+	.user_data = NULL,
+};
 
-// HTTP_RESOURCE_DEFINE(
-// 	fanResource,
-// 	test_http_service,
-// 	"/fan",
-// 	&fanResourceDetail);
+HTTP_RESOURCE_DEFINE(
+	fanResource,
+	test_http_service,
+	"/fan",
+	&fanResourceDetail);
 
 
 

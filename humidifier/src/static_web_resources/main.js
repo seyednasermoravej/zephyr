@@ -270,15 +270,6 @@ function bindNetworkControls() {
 // ==========================================
 // 4. UPTIME FEATURE
 // ==========================================
-// async function fetchPiezos() {
-//     try {
-//         const res = await fetch("/piezoes");
-//         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-//         const json = await res.json();
-//         const el = document.getElementById("uptime");
-//         if (el) el.textContent = `Uptime: ${json} milliseconds`;
-//     } catch (e) { console.error("Uptime fetch error:", e.message); }
-// }
 
 async function fetchFan() {
     try {
@@ -304,7 +295,42 @@ async function fetchUptime() {
         if (el) el.textContent = `Uptime: ${json} milliseconds`;
     } catch (e) { console.error("Uptime fetch error:", e.message); }
 }
+async function fetchPiezos() {
+    try {
+        const res = await fetch("/piezos");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
+        if (data.piezos && Array.isArray(data.piezos)) {
+            data.piezos.forEach((p, idx) => {
+                if (idx >= 3) return;
+                const state = piezosState[idx];
+                if (!state) return;
+
+                // Scale 0-255 (backend) back to 0-100 (UI)
+                const r = Math.round(p.led.red / 2.55);
+                const g = Math.round(p.led.green / 2.55);
+                const b = Math.round(p.led.blue / 2.55);
+                const intensity = p.intensity;
+
+                state.led.red = r; state.led.green = g; state.led.blue = b;
+                state.intensity = intensity;
+
+                // Update UI sliders/inputs
+                const setVal = (channel, val) => {
+                    const slider = document.getElementById(`piezo${idx}_${channel}_slider`);
+                    const input = document.getElementById(`piezo${idx}_${channel}_input`);
+                    if (slider) slider.value = val;
+                    if (input) input.value = val;
+                };
+
+                setVal('red', r);
+                setVal('intensity', intensity);
+                updatePreview(idx);
+            });
+        }
+    } catch (e) { console.error("Piezos fetch error:", e.message); }
+}
 // ==========================================
 // PASSWORD TOGGLE LOGIC
 // ==========================================
@@ -348,8 +374,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch initial data
     // fetchNetworkCredentials();
     fetchUptime();
-    // fetchPiezoes();
-    fetchFan();
     setInterval(fetchUptime, 1000);
+    fetchFan();
     setInterval(fetchFan, 1000);
+    fetchPiezos();
+    setInterval(fetchPiezos, 1000);
 });
