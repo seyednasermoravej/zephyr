@@ -23,6 +23,41 @@
         }
         section p { margin: 0 0 16px; color: #555; }
 
+        /*clock panel*/
+        .clock-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+            margin: 15px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #clock-time {
+            font-size: 3rem;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        #clock-date {
+            font-size: 1.2rem;
+            margin: 5px 0 10px 0;
+            opacity: 0.9;
+        }
+        .sync-status {
+            font-size: 0.85rem;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.2);
+        }
+        .sync-status.synced {
+            background: #4caf50;
+        }
+        .sync-status.failed {
+            background: #f44336;
+        }
         /* Piezo Panel */
         .piezo-panel {
             border: 1px solid #ddd; border-radius: 6px; padding: 14px 16px;
@@ -126,6 +161,14 @@
         <p class="subtitle">Piezo Actuators • RGB LEDs • Fan • Network</p>
     </header>
 
+    <section id="clock-section">
+        <h2>🕐 System Time</h2>
+        <div id="clock-display">
+            <span id="clock-time">--:--:--</span>
+            <span id="clock-date">Loading...</span>
+            <span id="clock-sync-status">⏳ Syncing...</span>
+        </div>
+    </section>
     <!-- Piezo + LED -->
     <section id="piezo-control-section">
         <h2>⚙️ Piezo Actuator & RGB LED</h2>
