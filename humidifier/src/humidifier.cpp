@@ -22,9 +22,8 @@ static const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
 
 Humidifier:: Humidifier()
 {
-	settings.fanSpeed = 50;
 	LOG_INF("enter consgtructure");
-	// readInfosFromMemory();
+	readInfosFromMemory();
 	bool ret = device_is_ready(pwmsDev);
 	LOG_INF("ret = %d", ret);
 	if (!ret) {
@@ -117,28 +116,28 @@ Humidifier:: Humidifier()
 	// INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
 }
 
-// void Humidifier:: setDefaultSettings()
-// {
-// #ifdef CONFIG_BOARD_ESP32_DEVKITC
-// 	strcpy(settings.credentials.ssid,"Humidifer");
-// 	strcpy(settings.credentials.password,"12345678");
-// #endif
-// 	settings.fanSpeed = 50;
-	// settings.piezos.active = -1;
-	// settings.piezos.piezosNum = 3;
-	// settings.piezos.piezos[0].intensity = 50;
-	// settings.piezos.piezos[0].led.red = 50;
-	// settings.piezos.piezos[0].led.green = 50;
-	// settings.piezos.piezos[0].led.blue = 50;
-	// settings.piezos.piezos[1].intensity = 50;
-	// settings.piezos.piezos[1].led.red = 50;
-	// settings.piezos.piezos[1].led.green = 50;
-	// settings.piezos.piezos[1].led.blue = 50;
-	// settings.piezos.piezos[2].intensity = 50;
-	// settings.piezos.piezos[2].led.red = 50;
-	// settings.piezos.piezos[2].led.green = 50;
-	// settings.piezos.piezos[2].led.blue = 50;
-// }
+void Humidifier:: setDefaultSettings()
+{
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
+	strcpy(settings.credentials.ssid,"Humidifer");
+	strcpy(settings.credentials.password,"12345678");
+#endif
+	settings.fanSpeed = 50;
+	settings.piezos.active = -1;
+	settings.piezos.piezosNum = 3;
+	settings.piezos.piezos[0].intensity = 50;
+	settings.piezos.piezos[0].led.red = 50;
+	settings.piezos.piezos[0].led.green = 50;
+	settings.piezos.piezos[0].led.blue = 50;
+	settings.piezos.piezos[1].intensity = 50;
+	settings.piezos.piezos[1].led.red = 50;
+	settings.piezos.piezos[1].led.green = 50;
+	settings.piezos.piezos[1].led.blue = 50;
+	settings.piezos.piezos[2].intensity = 50;
+	settings.piezos.piezos[2].led.red = 50;
+	settings.piezos.piezos[2].led.green = 50;
+	settings.piezos.piezos[2].led.blue = 50;
+}
 
 // void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
 // {
@@ -187,18 +186,18 @@ Humidifier:: Humidifier()
 //     }
 // }
 
-// int Humidifier:: readInfosFromMemory()
-// {
-// 	// nvsInit();
-// 	// eraseStorage();
-// 	int rc = -1;
-// 	// rc = nvs_read(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
-// 	if (rc < 0)
-// 	{
-// 		setDefaultSettings();
-// 	}
-// 	return rc;
-// }
+int Humidifier:: readInfosFromMemory()
+{
+	// nvsInit();
+	// eraseStorage();
+	int rc = -1;
+	// rc = nvs_read(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
+	if (rc < 0)
+	{
+		setDefaultSettings();
+	}
+	return rc;
+}
 
 // int Humidifier:: nvsInit()
 // {
@@ -233,97 +232,112 @@ Humidifier:: Humidifier()
 // 	return 0;
 // }
 
-// static void setPiezoPwm(uint8_t piezoNum,
-// 			uint8_t red,
-// 			uint8_t green,
-// 			uint8_t blue,
-// 			uint8_t intensity
-// 			)
-// {
-// 	int redCh, greenCh, blueCh;
+void Humidifier:: setPiezoPwm(uint8_t piezoNum,
+			uint8_t red,
+			uint8_t green,
+			uint8_t blue,
+			uint8_t intensity
+			)
+{
+	int redCh, greenCh, blueCh;
 
-// 	switch (piezoNum) {
+	switch (piezoNum) {
 
-// 	case 0:
-// 		redCh = RED0;
-// 		greenCh = GREEN0;
-// 		blueCh = BLUE0;
-// 		break;
+	case 0:
+		redCh = RED0;
+		greenCh = GREEN0;
+		blueCh = BLUE0;
+		break;
 
-// 	case 1:
-// 		redCh = RED1;
-// 		greenCh = GREEN1;
-// 		blueCh = BLUE1;
-// 		break;
+	case 1:
+		redCh = RED1;
+		greenCh = GREEN1;
+		blueCh = BLUE1;
+		break;
 
-// 	case 2:
-// 		redCh = RED2;
-// 		greenCh = GREEN2;
-// 		blueCh = BLUE2;
-// 		break;
+	case 2:
+		redCh = RED2;
+		greenCh = GREEN2;
+		blueCh = BLUE2;
+		break;
 
-// 	default:
-// 		LOG_ERR("Invalid piezo %d", piezoNum);
-// 		return;
-// 	}
+	default:
+		LOG_ERR("Invalid piezo %d", piezoNum);
+		return;
+	}
 
-// 	led_set_brightness(pwmsDev, redCh, red);
-// 	led_set_brightness(pwmsDev, greenCh, green);
-// 	led_set_brightness(pwmsDev, blueCh, blue);
-// 	led_set_brightness(pwmsDev, PIEZO, intensity);
-// }
+	led_set_brightness(pwmsDev, redCh, red);
+	led_set_brightness(pwmsDev, greenCh, green);
+	led_set_brightness(pwmsDev, blueCh, blue);
+	led_set_brightness(pwmsDev, PIEZO, intensity);
+}
 
-// void Humidifier:: parsePiezosPost(char *buf, size_t len)
-// {
-// 	struct PiezoStatus cmd;
-// 	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
+int Humidifier::piezosStatus(char *buf, size_t bufSize)
+{
+    int ret = json_obj_encode_buf(piezosDescr, ARRAY_SIZE(piezosDescr), &settings.piezos, buf, bufSize);
+    if (ret < 0) LOG_ERR("Failed to encode piezos status");
+    return ret;
+}
 
-// 	if (ret < 0) {
-// 		LOG_ERR("Piezo JSON parse failed");
-// 		return;
-// 	}
+void Humidifier:: parsePiezosPost(char *buf, size_t len)
+{
+	struct PiezoStatus cmd;
+	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
 
-// 	LOG_INF("Piezo %u RGB(%u,%u,%u) Intensity %u",
-// 		cmd.piezoNum,
-// 		cmd.led.red,
-// 		cmd.led.green,
-// 		cmd.led.blue,
-// 		cmd.intensity
-// 	);
+	if (ret < 0) {
+		LOG_ERR("Piezo JSON parse failed");
+		return;
+	}
 
-// 	setPiezoPwm(
-// 		cmd.piezoNum,
-// 		cmd.led.red,
-// 		cmd.led.red,
-// 		cmd.led.red,
-// 		cmd.intensity
-// 	);
-// }
+	LOG_INF("Piezo %u RGB(%u,%u,%u) Intensity %u",
+		cmd.piezoNum,
+		cmd.led.red,
+		cmd.led.green,
+		cmd.led.blue,
+		cmd.intensity
+	);
 
-// void Humidifier:: parseFanPost(char *buf, size_t len)
-// {
-// 	struct FanStatus cmd;
+	if (cmd.piezoNum < NUM_OF_PIEZOS) {
+		settings.piezos.piezos[cmd.piezoNum].led.red = cmd.led.red;
+		settings.piezos.piezos[cmd.piezoNum].led.green = cmd.led.red;
+		settings.piezos.piezos[cmd.piezoNum].led.blue = cmd.led.red;
+		settings.piezos.piezos[cmd.piezoNum].intensity = cmd.intensity;
+		settings.piezos.active = cmd.piezoNum;
+	}
 
-// 	int ret = json_obj_parse(
-// 		buf,
-// 		len,
-// 		fanDescr,
-// 		ARRAY_SIZE(fanDescr),
-// 		&cmd);
+	setPiezoPwm(
+		cmd.piezoNum,
+		cmd.led.red,
+		cmd.led.red,
+		cmd.led.red,
+		cmd.intensity
+	);
+}
 
-// 	if (ret < 0) {
-// 		LOG_ERR("Fan JSON parse failed");
-// 		return;
-// 	}
+void Humidifier:: parseFanPost(char *buf, size_t len)
+{
+	struct FanStatus cmd;
 
-// 	LOG_INF("Fan speed %d", cmd.speed);
+	int ret = json_obj_parse(
+		buf,
+		len,
+		fanDescr,
+		ARRAY_SIZE(fanDescr),
+		&cmd);
 
-// 	led_set_brightness(
-// 		pwmsDev,
-// 		FAN,
-// 		cmd.speed);
-// 	settings.fanSpeed = cmd.speed;
-// }
+	if (ret < 0) {
+		LOG_ERR("Fan JSON parse failed");
+		return;
+	}
+
+	LOG_INF("Fan speed %d", cmd.speed);
+
+	led_set_brightness(
+		pwmsDev,
+		FAN,
+		cmd.speed);
+	settings.fanSpeed = cmd.speed;
+}
 
 // void Humidifier:: parseCredentialsPost(char *buf, size_t len)
 // {
@@ -351,18 +365,13 @@ Humidifier:: Humidifier()
 	// setIpAddress(cmd.ipAddress);
 // }
 
-// int Humidifier:: status(char *buf, size_t bufSize, uint64_t uptime)
-// {
-// 	settings.uptime = uptime;
-// 	return json_obj_encode_buf(settingsDescr, ARRAY_SIZE(settingsDescr), &settings, buf, bufSize);
-// }
 
-// int Humidifier:: fanStatus(char *buf, size_t bufSize)
-// {
-// 	int ret = 0;
-// 	static FanStatus fan;
-// 	fan.speed = settings.fanSpeed;
-// 	ret = json_obj_encode_buf(fanDescr, ARRAY_SIZE(fanDescr), &fan, buf, bufSize);
-// 	LOG_DBG("buffer is: %s", buf);
-// 	return ret;
-// }
+int Humidifier:: fanStatus(char *buf, size_t bufSize)
+{
+	int ret = 0;
+	static FanStatus fan;
+	fan.speed = settings.fanSpeed;
+	ret = json_obj_encode_buf(fanDescr, ARRAY_SIZE(fanDescr), &fan, buf, bufSize);
+	LOG_DBG("buffer is: %s", buf);
+	return ret;
+}

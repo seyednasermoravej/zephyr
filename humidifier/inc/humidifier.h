@@ -94,7 +94,7 @@ struct Settings
 {
 	// uint64_t uptime;
 	uint8_t fanSpeed = 50;
-	// struct PiezosStatus piezos = { 0 };
+	struct PiezosStatus piezos = { 0 };
 	// struct IpAddress ipAddress = { 0 };
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
 	struct Credentials credentials = { 0 };
@@ -146,11 +146,12 @@ class Humidifier
 {
 public:
 	Humidifier();
-	// void parsePiezosPost(char *buf, size_t len);
-	// void parseFanPost(char *buf, size_t len);
+	void parsePiezosPost(char *buf, size_t len);
+	void parseFanPost(char *buf, size_t len);
 	// // void parseCredentialsPost(char *buf, size_t len);
-	// void parseIpAddressPost(char *buf, size_t len);
-	// int fanStatus(char *buf, size_t bufSize);
+	void parseIpAddressPost(char *buf, size_t len);
+	int fanStatus(char *buf, size_t bufSize);
+	int piezosStatus(char *buf, size_t bufSize);
 
 	// static void buttonsHandlerWrapper(struct input_event *val, void* userData);
 	// void buttonsHandler(struct input_event *val);
@@ -159,10 +160,11 @@ private:
 	struct Settings settings;
 	// struct nvs_fs *fs;
 
-	// int readInfosFromMemory();
+	int readInfosFromMemory();
 	// int nvsInit();
-	// void setDefaultSettings();
-
+	void setDefaultSettings();
+	void setPiezoPwm(uint8_t piezoNum, uint8_t red,	uint8_t green,
+			uint8_t blue, uint8_t intensity);
 
 };
 
