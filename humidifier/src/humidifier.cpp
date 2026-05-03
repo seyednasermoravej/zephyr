@@ -38,27 +38,25 @@ Humidifier:: Humidifier()
 		LOG_ERR("err=%d brightness=%d\n", err, settings.fanSpeed);
 		return;
 	}
-	// settings.piezos.piezos[0].intensity = 20;
-	// err = led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[0].intensity);
-	// LOG_INF("err=%d \n", err);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].intensity);
-	// 	return;
-	// }
-	// settings.piezos.piezos[0].led.red = 30;
-	// err = led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[0].led.red);
-	// LOG_INF("err=%d \n", err);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].led.red);
-	// 	return;
-	// }
+	err = led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[0].intensity);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].intensity);
+		return;
+	}
+	err = led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[0].brightness);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].brightness);
+		return;
+	}
 	// settings.piezos.piezos[0].led.green = 40;
-	// err = led_set_brightness(pwmsDev, GREEN0, settings.piezos.piezos[0].led.green);
-	// LOG_INF("err=%d \n", err);
-	// if (err < 0) {
-	// 	LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].led.green);
-	// 	return;
-	// }
+	err = led_set_brightness(pwmsDev, GREEN0, settings.piezos.piezos[0].brightness);
+	LOG_INF("err=%d \n", err);
+	if (err < 0) {
+		LOG_ERR("err=%d brightness=%d\n", err, settings.piezos.piezos[0].brightness);
+		return;
+	}
 
 	// setup_tls();
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
@@ -125,18 +123,12 @@ void Humidifier:: setDefaultSettings()
 	settings.fanSpeed = 50;
 	settings.piezos.active = -1;
 	settings.piezos.piezosNum = 3;
-	settings.piezos.piezos[0].intensity = 50;
-	settings.piezos.piezos[0].led.red = 50;
-	settings.piezos.piezos[0].led.green = 50;
-	settings.piezos.piezos[0].led.blue = 50;
-	settings.piezos.piezos[1].intensity = 50;
-	settings.piezos.piezos[1].led.red = 50;
-	settings.piezos.piezos[1].led.green = 50;
-	settings.piezos.piezos[1].led.blue = 50;
-	settings.piezos.piezos[2].intensity = 50;
-	settings.piezos.piezos[2].led.red = 50;
-	settings.piezos.piezos[2].led.green = 50;
-	settings.piezos.piezos[2].led.blue = 50;
+	settings.piezos.piezos[0].intensity = 10;
+	settings.piezos.piezos[0].brightness = 10;
+	settings.piezos.piezos[1].intensity = 10;
+	settings.piezos.piezos[1].brightness = 10;
+	settings.piezos.piezos[2].brightness = 20;
+	settings.piezos.piezos[2].intensity = 20;
 }
 
 // void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
@@ -246,9 +238,11 @@ void Humidifier:: setPiezoPwm(uint8_t piezoNum,
 	case 0:
 		redCh = RED0;
 		greenCh = GREEN0;
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 		blueCh = BLUE0;
+#endif
 		break;
-
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	case 1:
 		redCh = RED1;
 		greenCh = GREEN1;
@@ -260,16 +254,18 @@ void Humidifier:: setPiezoPwm(uint8_t piezoNum,
 		greenCh = GREEN2;
 		blueCh = BLUE2;
 		break;
-
+#endif
 	default:
 		LOG_ERR("Invalid piezo %d", piezoNum);
 		return;
 	}
 
+	led_set_brightness(pwmsDev, PIEZO, intensity);
 	led_set_brightness(pwmsDev, redCh, red);
 	led_set_brightness(pwmsDev, greenCh, green);
+#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	led_set_brightness(pwmsDev, blueCh, blue);
-	led_set_brightness(pwmsDev, PIEZO, intensity);
+#endif
 }
 
 int Humidifier::piezosStatus(char *buf, size_t bufSize)
@@ -281,35 +277,31 @@ int Humidifier::piezosStatus(char *buf, size_t bufSize)
 
 void Humidifier:: parsePiezosPost(char *buf, size_t len)
 {
-	struct PiezoStatus cmd;
-	int ret = json_obj_parse(buf, len, piezoDescr, ARRAY_SIZE(piezoDescr), &cmd);
+	struct PiezoStatusUpdate cmd = { 0 };
+	int ret = json_obj_parse(buf, len, piezoDescrUpdate, ARRAY_SIZE(piezoDescrUpdate), &cmd);
 
 	if (ret < 0) {
 		LOG_ERR("Piezo JSON parse failed");
 		return;
 	}
 
-	LOG_INF("Piezo %u RGB(%u,%u,%u) Intensity %u",
+	LOG_INF("Piezo %u, brightness %u Intensity %u",
 		cmd.piezoNum,
-		cmd.led.red,
-		cmd.led.green,
-		cmd.led.blue,
+		cmd.brightness,
 		cmd.intensity
 	);
 
 	if (cmd.piezoNum < NUM_OF_PIEZOS) {
-		settings.piezos.piezos[cmd.piezoNum].led.red = cmd.led.red;
-		settings.piezos.piezos[cmd.piezoNum].led.green = cmd.led.red;
-		settings.piezos.piezos[cmd.piezoNum].led.blue = cmd.led.red;
+		settings.piezos.piezos[cmd.piezoNum].brightness = cmd.brightness;
 		settings.piezos.piezos[cmd.piezoNum].intensity = cmd.intensity;
-		settings.piezos.active = cmd.piezoNum;
+		// settings.piezos.active = cmd.piezoNum;
 	}
-
+///it should be moved to toggle piezo and sheduler function
 	setPiezoPwm(
 		cmd.piezoNum,
-		cmd.led.red,
-		cmd.led.red,
-		cmd.led.red,
+		cmd.brightness,
+		cmd.brightness,
+		cmd.brightness,
 		cmd.intensity
 	);
 }

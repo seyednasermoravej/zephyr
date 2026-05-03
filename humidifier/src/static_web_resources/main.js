@@ -3,10 +3,7 @@
 // ==========================================
 function createPiezoPanelHTML(piezoIndex) {
     const channels = [
-        { name: 'red', class: 'red', label: 'Brightness' },
-        // { name: 'red', class: 'red', label: 'Red' },
-        // { name: 'green', class: 'green', label: 'Green' },
-        // { name: 'blue', class: 'blue', label: 'Blue' },
+        { name: 'brightness', class: 'brightness', label: 'Brightness' },
         { name: 'intensity', class: 'intensity', label: 'Piezo Power' }
     ];
 
@@ -83,9 +80,9 @@ function createPiezoPanelHTML(piezoIndex) {
 // 2. STATE & CORE LOGIC
 // ==========================================
 const piezosState = {
-    0: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
-    1: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null },
-    2: { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null }
+    0: {  brightness: 0, intensity: 100, timeout: null },
+    1: {  brightness: 0, intensity: 100, timeout: null },
+    2: {  brightness: 0, intensity: 100, timeout: null }
 };
 const fanState = { speed: 0, timeout: null };
 
@@ -99,7 +96,8 @@ function updatePiezoState(piezoIndex, channel, value) {
     const state = piezosState[piezoIndex];
     if (!state) return;
     if (channel === 'intensity') state.intensity = value;
-    else if (state.led.hasOwnProperty(channel)) state.led[channel] = value;
+    if (channel === 'brightness') state.brightness = value;
+    state.lastLocalUpdate = Date.now();
 }
 
 function scheduleSend(piezoIndex) {
@@ -112,13 +110,11 @@ function scheduleSend(piezoIndex) {
 function updatePreview(piezoIndex) {
     const state = piezosState[piezoIndex];
     if (!state) return;
-    const { led } = state;
-    const r = Math.round(led.red * 2.55);
-    // const g = Math.round(led.green * 2.55);
-    // const b = Math.round(led.blue * 2.55);
+
+    const b = Math.round(state.brightness * 2.55);
+
     const preview = document.getElementById(`preview_${piezoIndex}`);
-    if (preview) preview.style.background = `rgb(${r},0,0)`;
-    // if (preview) preview.style.background = `rgb(${r},${g},${b})`;
+    if (preview) preview.style.background = `rgb(${b}, ${b}, ${b})`;
 }
 
 async function postPiezo(piezoIndex) {
@@ -127,14 +123,8 @@ async function postPiezo(piezoIndex) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                piezoNum: parseInt(piezoIndex, 10),
-                led: {
-                    red: Math.round(piezosState[piezoIndex].led.red * 2.55),
-                    // green: Math.round(piezosState[piezoIndex].led.green * 2.55),
-                    // blue: Math.round(piezosState[piezoIndex].led.blue * 2.55)
-                    green: 0,
-                    blue: 0
-                },
+                piezoNum: parseInt(piezoIndex),
+                brightness: piezosState[piezoIndex].brightness,
                 intensity: piezosState[piezoIndex].intensity
             })
         });
@@ -160,18 +150,18 @@ async function postFan() {
 }
 
 // --- Network ---
-async function fetchNetworkCredentials() {
+async function fetchNetworkCbrightnessentials() {
     try {
-        const res = await fetch("/credentials");
+        const res = await fetch("/cbrightnessentials");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const ssidInput = document.getElementById("network-ssid");
         if (ssidInput && data.ssid) ssidInput.value = data.ssid;
         // Password intentionally left blank for security
-    } catch (e) { console.warn("Could not fetch network credentials:", e.message); }
+    } catch (e) { console.warn("Could not fetch network cbrightnessentials:", e.message); }
 }
 
-async function saveNetworkCredentials() {
+async function saveNetworkCbrightnessentials() {
     const ssid = document.getElementById("network-ssid").value.trim();
     const password = document.getElementById("network-password").value;
     const statusEl = document.getElementById("network-status");
@@ -188,13 +178,13 @@ async function saveNetworkCredentials() {
     statusEl.textContent = "";
 
     try {
-        const res = await fetch("/credentials", {
+        const res = await fetch("/cbrightnessentials", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ssid, password })
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        statusEl.textContent = "✅ Credentials saved. Device may reboot to apply.";
+        statusEl.textContent = "✅ Cbrightnessentials saved. Device may reboot to apply.";
         statusEl.className = "status-msg success";
         document.getElementById("network-password").value = "";
     } catch (e) {
@@ -202,7 +192,7 @@ async function saveNetworkCredentials() {
         statusEl.className = "status-msg error";
     } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = "Save Credentials";
+        saveBtn.textContent = "Save Cbrightnessentials";
     }
 }
 
@@ -264,7 +254,7 @@ function bindFanControls() {
 
 function bindNetworkControls() {
     const saveBtn = document.getElementById("network-save-btn");
-    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCredentials);
+    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCbrightnessentials);
 }
 
 // ==========================================
@@ -300,21 +290,24 @@ async function fetchPiezos() {
         const res = await fetch("/piezos");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
+        console.log("json is: ", data);
         if (data.piezos && Array.isArray(data.piezos)) {
             data.piezos.forEach((p, idx) => {
                 if (idx >= 3) return;
                 const state = piezosState[idx];
                 if (!state) return;
 
-                // Scale 0-255 (backend) back to 0-100 (UI)
-                const r = Math.round(p.led.red / 2.55);
-                const g = Math.round(p.led.green / 2.55);
-                const b = Math.round(p.led.blue / 2.55);
+                const RECENT_CHANGE_WINDOW_MS = 2000;
+                if (Date.now() - state.lastLocalUpdate < RECENT_CHANGE_WINDOW_MS) {
+                    return; // Don't overwrite user's recent change
+                }
+
+                const b = p.brightness;
                 const intensity = p.intensity;
 
-                state.led.red = r; state.led.green = g; state.led.blue = b;
+                state.brightness = b;
                 state.intensity = intensity;
+                state.lastLocalUpdate = 0; 
 
                 // Update UI sliders/inputs
                 const setVal = (channel, val) => {
@@ -324,7 +317,7 @@ async function fetchPiezos() {
                     if (input) input.value = val;
                 };
 
-                setVal('red', r);
+                setVal('brightness', b);
                 setVal('intensity', intensity);
                 updatePreview(idx);
             });
@@ -357,7 +350,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let panelsHTML = '';
         for (let i = 0; i < 3; i++) {
             panelsHTML += createPiezoPanelHTML(i);
-            if (!piezosState[i]) piezosState[i] = { led: { red: 0, green: 0, blue: 0 }, intensity: 100, timeout: null };
+            if (!piezosState[i]) piezosState[i] = { brightness: 0, intensity: 100, timeout: null };
         }
         container.innerHTML = panelsHTML;
     }
@@ -372,11 +365,11 @@ document.addEventListener("DOMContentLoaded", () => {
     [0, 1, 2].forEach(updatePreview);
 
     // Fetch initial data
-    // fetchNetworkCredentials();
+    // fetchNetworkCbrightnessentials();
     fetchUptime();
     setInterval(fetchUptime, 1000);
     fetchFan();
-    setInterval(fetchFan, 1000);
+    setInterval(fetchFan, 500);
     fetchPiezos();
-    setInterval(fetchPiezos, 1000);
+    setInterval(fetchPiezos, 500);
 });

@@ -56,15 +56,13 @@ enum pwmIndices
 	BLUE2,
 };
 
-struct rgbValues
-{
-	uint8_t red;
-	uint8_t green;
-	uint8_t blue;
+struct PiezoStatusUpdate {
+	uint8_t piezoNum;
+	uint8_t brightness;
+	uint8_t intensity;
 };
 struct PiezoStatus {
-	uint8_t piezoNum;
-	struct rgbValues led;
+	uint8_t brightness;
 	uint8_t intensity;
 };
 
@@ -73,7 +71,7 @@ struct PiezoStatus {
 struct PiezosStatus {
 	int8_t active;
 	struct PiezoStatus piezos[3];
-	uint8_t piezosNum;
+	size_t piezosNum;
 };
 struct FanStatus {
 	uint8_t speed;
@@ -111,16 +109,15 @@ static const struct json_obj_descr credentialsDescr[] = {
 	JSON_OBJ_DESCR_PRIM(struct Credentials, password, JSON_TOK_STRING),
 };
 
-static const struct json_obj_descr rgbDescr[] = {
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, red, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, green, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_PRIM(struct rgbValues, blue, JSON_TOK_UINT),
+static const struct json_obj_descr piezoDescr[] = {
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, brightness, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, intensity, JSON_TOK_UINT),
 };
 
-static const struct json_obj_descr piezoDescr[] = {
-    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, piezoNum, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_OBJECT(struct PiezoStatus, led, rgbDescr),
-    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, intensity, JSON_TOK_UINT),
+static const struct json_obj_descr piezoDescrUpdate[] = {
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, piezoNum, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, brightness, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, intensity, JSON_TOK_UINT),
 };
 static const struct json_obj_descr piezosDescr[] = {
     JSON_OBJ_DESCR_PRIM(struct PiezosStatus, active, JSON_TOK_INT),
@@ -132,12 +129,6 @@ static const struct json_obj_descr fanDescr[] = {
 	JSON_OBJ_DESCR_PRIM(struct FanStatus, speed, JSON_TOK_UINT),
 };
 
-// static const struct json_obj_descr settingsDescr[] = {
-// 	JSON_OBJ_DESCR_PRIM(struct Settings, uptime, JSON_TOK_UINT64),
-// 	JSON_OBJ_DESCR_PRIM(struct Settings, fanSpeed, JSON_TOK_UINT),
-// 	JSON_OBJ_DESCR_OBJECT(struct Settings, piezos, piezosDescr),
-
-// };
 
 #define NVS_SETTINGS_ID 0
 
