@@ -205,53 +205,65 @@ static struct http_resource_detail_dynamic uptime_resource_detail = {
 
 
 
-// static int credentialsHandler(struct http_client_ctx *client,
-// 		      enum http_transaction_status status,
-// 		      const struct http_request_ctx *requestCtx,
-// 		      struct http_response_ctx *responseCtx,
-// 		      void *userData)
-// {
-// 	static char postBuf[128];
-// 	static size_t cursor;
+static int credentialsHandler(struct http_client_ctx *client,
+		      enum http_transaction_status status,
+		      const struct http_request_ctx *requestCtx,
+		      struct http_response_ctx *responseCtx,
+		      void *userData)
+{
+	static char postBuf[128];
+	static size_t cursor;
 
-// 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
-// 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-// 		cursor = 0;
-// 		return 0;
-// 	}
+	if (client->method == HTTP_GET) {
+		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+			int len = humidifier->credentialStatus(postBuf, sizeof(postBuf));
+			if (len == 0) {
+				responseCtx->body = (uint8_t *)postBuf;
+				responseCtx->body_len = strlen(postBuf);
+				responseCtx->final_chunk = true;
+			}
+		}
+		return 0;
+	}
 
-// 	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-// 		cursor = 0;
-// 		return -ENOMEM;
-// 	}
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		cursor = 0;
+		return 0;
+	}
 
-// 	memcpy(postBuf + cursor,
-// 	       requestCtx->data,
-// 	       requestCtx->data_len);
+	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
+		cursor = 0;
+		return -ENOMEM;
+	}
 
-// 	cursor += requestCtx->data_len;
+	memcpy(postBuf + cursor,
+	       requestCtx->data,
+	       requestCtx->data_len);
 
-// 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-// 		humidifier->parseCredentialsPost(postBuf, cursor);
-// 		cursor = 0;
-// 	}
+	cursor += requestCtx->data_len;
 
-// 	return 0;
-// }
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		humidifier->parseCredentialsPost(postBuf, cursor);
+		cursor = 0;
+	}
 
-// static struct http_resource_detail_dynamic credentialsResourceDetail = {
-// 	.common = {
-// 			.bitmask_of_supported_http_methods = BIT(HTTP_POST),
-// 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
-// 		},
-// 	.cb = credentialsHandler,
-// 	.user_data = NULL,
-// };
+	return 0;
+}
 
-// HTTP_RESOURCE_DEFINE(credentialsResource,
-// 		     test_http_service,
-// 		     "/credentials",
-// 		     &credentialsResourceDetail);
+static struct http_resource_detail_dynamic credentialsResourceDetail = {
+	.common = {
+			.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		},
+	.cb = credentialsHandler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(credentialsResource,
+		     test_http_service,
+		     "/credentials",
+		     &credentialsResourceDetail);
 
 
 
@@ -393,7 +405,46 @@ HTTP_RESOURCE_DEFINE(
 	"/fan",
 	&fanResourceDetail);
 
+// Add after fanHandler, before main()
 
+static int timeHandler(struct http_client_ctx *client,
+                       enum http_transaction_status status,
+                       const struct http_request_ctx *requestCtx,
+                       struct http_response_ctx *responseCtx,
+                       void *userData)
+{
+    static char timeBuf[64];
+
+    // Only support GET
+    if (client->method != HTTP_GET) {
+        return -EINVAL;
+    }
+
+    if (status == HTTP_SERVER_REQUEST_DATA_FINAL ||
+        status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+        int len = humidifier->timeStatus(timeBuf, sizeof(timeBuf));
+        if (len > 0) {
+            responseCtx->body = (uint8_t *)timeBuf;
+            responseCtx->body_len = len;
+            responseCtx->final_chunk = true;
+        }
+    }
+    return 0;
+}
+
+static struct http_resource_detail_dynamic timeResourceDetail = {
+    .common = {
+        .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+        .type = HTTP_RESOURCE_TYPE_DYNAMIC,
+    },
+    .cb = timeHandler,
+    .user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(timeResource,
+                     test_http_service,
+                     "/time",
+                     &timeResourceDetail);
 
 #if defined(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE)
 static uint8_t ws_echo_buffer[1024];
@@ -556,8 +607,8 @@ int main(void)
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
-		.ssid = (uint8_t *)"Naser-Wi-Fi",
-		.ssid_length = strlen("Naser-Wi-Fi"),
+		.ssid = (uint8_t *)"Naser-Wi-Fi2",
+		.ssid_length = strlen("Naser-Wi-Fi2"),
 		.psk = (uint8_t *)"1020151515",
 		.psk_length = strlen("1020151515"),
 		// .ssid = "PAIDAR",

@@ -41,6 +41,8 @@
 
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
+#include <zephyr/net/sntp.h>
+
 enum pwmIndices
 {
 	FAN = 0,
@@ -77,10 +79,15 @@ struct FanStatus {
 	uint8_t speed;
 };
 
+struct TimeStatus {
+    uint32_t timestamp;  // Unix epoch time (seconds)
+    bool synced;         // true if SNTP sync succeeded
+};
+
 struct Credentials
 {
-	char *ssid;
-	char *password;
+	char ssid[32];
+	char password[32];
 };
 
 struct IpAddress
@@ -94,19 +101,17 @@ struct Settings
 	uint8_t fanSpeed = 50;
 	struct PiezosStatus piezos = { 0 };
 	// struct IpAddress ipAddress = { 0 };
-#ifdef CONFIG_BOARD_ESP32_DEVKITC
 	struct Credentials credentials = { 0 };
-#endif
 
 };
 
 static const struct json_obj_descr ipAddressDescr[] = {
-	JSON_OBJ_DESCR_PRIM(struct IpAddress, ip, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct IpAddress, ip, JSON_TOK_STRING_BUF),
 };
 
 static const struct json_obj_descr credentialsDescr[] = {
-	JSON_OBJ_DESCR_PRIM(struct Credentials, ssid, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct Credentials, password, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct Credentials, ssid, JSON_TOK_STRING_BUF),
+	JSON_OBJ_DESCR_PRIM(struct Credentials, password, JSON_TOK_STRING_BUF),
 };
 
 static const struct json_obj_descr piezoDescr[] = {
@@ -129,6 +134,11 @@ static const struct json_obj_descr fanDescr[] = {
 	JSON_OBJ_DESCR_PRIM(struct FanStatus, speed, JSON_TOK_UINT),
 };
 
+static const struct json_obj_descr timeDescr[] = {
+    JSON_OBJ_DESCR_PRIM(struct TimeStatus, timestamp, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct TimeStatus, synced, JSON_TOK_TRUE),
+};
+
 
 #define NVS_SETTINGS_ID 0
 
@@ -139,13 +149,16 @@ public:
 	Humidifier();
 	void parsePiezosPost(char *buf, size_t len);
 	void parseFanPost(char *buf, size_t len);
-	// // void parseCredentialsPost(char *buf, size_t len);
+	void parseCredentialsPost(char *buf, size_t len);
 	void parseIpAddressPost(char *buf, size_t len);
 	int fanStatus(char *buf, size_t bufSize);
 	int piezosStatus(char *buf, size_t bufSize);
-
+	int credentialStatus(char *buf, size_t bufSize);
 	// static void buttonsHandlerWrapper(struct input_event *val, void* userData);
 	// void buttonsHandler(struct input_event *val);
+    // Sync time on boot (non-blocking)
+	void syncTimeSntp();
+	int timeStatus(char *buf, size_t bufSize);
 
 private:
 	struct Settings settings;
@@ -156,6 +169,9 @@ private:
 	void setDefaultSettings();
 	void setPiezoPwm(uint8_t piezoNum, uint8_t red,	uint8_t green,
 			uint8_t blue, uint8_t intensity);
+	uint32_t currentTime;  // Store current Unix timestamp
+	bool timeSynced;
+	void setCredentials(char *ssid, char *psk);
 
 };
 
