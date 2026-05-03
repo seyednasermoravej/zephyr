@@ -307,7 +307,7 @@ async function fetchPiezos() {
 
                 state.brightness = b;
                 state.intensity = intensity;
-                state.lastLocalUpdate = 0; 
+                state.lastLocalUpdate = 0;
 
                 // Update UI sliders/inputs
                 const setVal = (channel, val) => {
@@ -341,6 +341,81 @@ function bindPasswordToggle() {
     });
 }
 // ==========================================
+// 6. CLOCK FEATURE
+// ==========================================
+const timeState = {
+    timestamp: 0,
+    synced: false,
+    lastFetch: 0,
+    updateInterval: null
+};
+
+// Format Unix timestamp to readable time/date
+function formatTime(timestamp) {
+    const date = new Date(timestamp * 1000); // JS uses milliseconds
+    return {
+        time: date.toLocaleTimeString('en-US', { hour12: false }),
+        date: date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        })
+    };
+}
+
+// Update clock display (called every second)
+function updateClockDisplay() {
+    if (!timeState.timestamp) return;
+
+    // Calculate current time based on last sync + elapsed time
+    const now = Math.floor(Date.now() / 1000);
+    const elapsed = now - timeState.lastFetch;
+    const displayTime = new Date((timeState.timestamp + elapsed) * 1000);
+
+    const timeEl = document.getElementById('clock-time');
+    const dateEl = document.getElementById('clock-date');
+    const syncEl = document.getElementById('clock-sync-status');
+
+    if (timeEl) {
+        timeEl.textContent = displayTime.toLocaleTimeString('en-US', { hour12: false });
+    }
+    if (dateEl) {
+        dateEl.textContent = displayTime.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+    if (syncEl) {
+        syncEl.textContent = timeState.synced ? '✅ Synced' : '⚠️ Not Synced';
+        syncEl.className = `sync-status ${timeState.synced ? 'synced' : 'failed'}`;
+    }
+}
+
+// Fetch time from backend
+async function fetchTime() {
+    try {
+        const res = await fetch('/time');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        timeState.timestamp = data.timestamp;
+        timeState.synced = data.synced;
+        timeState.lastFetch = Math.floor(Date.now() / 1000);
+
+        updateClockDisplay();
+    } catch (e) {
+        console.error("Time fetch error:", e.message);
+        const syncEl = document.getElementById('clock-sync-status');
+        if (syncEl) {
+            syncEl.textContent = '❌ Error';
+            syncEl.className = 'sync-status failed';
+        }
+    }
+}
+// ==========================================
 // 5. INITIALIZATION
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
@@ -372,4 +447,10 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(fetchFan, 500);
     fetchPiezos();
     setInterval(fetchPiezos, 500);
+
+    fetchTime();
+    // Update display every second for live clock
+    timeState.updateInterval = setInterval(updateClockDisplay, 1000);
+    // Re-fetch from backend every 60s to stay in sync
+    setInterval(fetchTime, 60000);
 });
