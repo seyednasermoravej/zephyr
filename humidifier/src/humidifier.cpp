@@ -24,6 +24,12 @@ Humidifier:: Humidifier()
 {
 	LOG_INF("enter consgtructure");
 	readInfosFromMemory();
+
+	currentTime = 0;
+	timeSynced = false;
+
+	// Sync time on boot (non-blocking)
+	syncTimeSntp();
 	bool ret = device_is_ready(pwmsDev);
 	LOG_INF("ret = %d", ret);
 	if (!ret) {
@@ -100,7 +106,7 @@ Humidifier:: Humidifier()
 	LOG_INF("err=%d \n", err);
 	if (err < 0) {
 		LOG_ERR("err=%d brightness=%d\n", err, pwmLevel);
-		return 0;
+		return;
 	}
 	pwmLevel = 30;
 	err = led_set_brightness(pwmsDev, BLUE2, pwmLevel);
@@ -123,12 +129,14 @@ void Humidifier:: setDefaultSettings()
 	settings.fanSpeed = 50;
 	settings.piezos.active = -1;
 	settings.piezos.piezosNum = 3;
-	settings.piezos.piezos[0].intensity = 10;
+	settings.piezos.piezos[0].intensity = 50;
 	settings.piezos.piezos[0].brightness = 10;
 	settings.piezos.piezos[1].intensity = 10;
 	settings.piezos.piezos[1].brightness = 10;
 	settings.piezos.piezos[2].brightness = 20;
 	settings.piezos.piezos[2].intensity = 20;
+	strncpy(settings.credentials.ssid, "Humidifier", strlen("Humidifier"));
+	strncpy(settings.credentials.password, "HumidifierPass", strlen("HumidifierPass"));
 }
 
 // void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
@@ -331,18 +339,18 @@ void Humidifier:: parseFanPost(char *buf, size_t len)
 	settings.fanSpeed = cmd.speed;
 }
 
-// void Humidifier:: parseCredentialsPost(char *buf, size_t len)
-// {
-	// struct Credentials cmd;
-	// int ret = json_obj_parse(buf, len, credentialsDescr, ARRAY_SIZE(credentialsDescr), &cmd);
+void Humidifier:: parseCredentialsPost(char *buf, size_t len)
+{
+	struct Credentials cmd = { 0 };
+	int ret = json_obj_parse(buf, len, credentialsDescr, ARRAY_SIZE(credentialsDescr), &cmd);
 
-	// if (ret < 0) {
-	// 	LOG_ERR("Credentials JSON parse failed");
-	// 	return;
-	// }
-	// LOG_INF("Set credentials to ssid: %s, password: %s", cmd.ssid, cmd.password);
-	// setCredentials(cmd.ssid, cmd.password);
-// }
+	if (ret < 0) {
+		LOG_ERR("Credentials JSON parse failed");
+		return;
+	}
+	LOG_INF("Set credentials to ssid: %s, password: %s", cmd.ssid, cmd.password);
+	setCredentials(cmd.ssid, cmd.password);
+}
 
 // void Humidifier:: parseIpAddressPost(char *buf, size_t len)
 // {
@@ -364,6 +372,52 @@ int Humidifier:: fanStatus(char *buf, size_t bufSize)
 	static FanStatus fan;
 	fan.speed = settings.fanSpeed;
 	ret = json_obj_encode_buf(fanDescr, ARRAY_SIZE(fanDescr), &fan, buf, bufSize);
-	LOG_DBG("buffer is: %s", buf);
+	LOG_DBG("fan buffer is: %s", buf);
 	return ret;
+}
+
+int Humidifier:: credentialStatus(char *buf, size_t bufSize)
+{
+	int ret = 0;
+	static Credentials credentials;
+	ret = json_obj_encode_buf(credentialsDescr, ARRAY_SIZE(credentialsDescr), &settings.credentials, buf, bufSize);
+	LOG_DBG("credentials buffer is: %s", buf);
+	return ret;
+}
+
+int Humidifier::timeStatus(char *buf, size_t bufSize) {
+    // Update from uptime if not synced
+    if (!timeSynced) {
+        currentTime = k_uptime_get() / 1000;
+    }
+
+    struct TimeStatus status = {
+        .timestamp = currentTime,
+        .synced = timeSynced
+    };
+    int ret = json_obj_encode_buf(timeDescr, ARRAY_SIZE(timeDescr), &status, buf, bufSize);
+    if (ret < 0) LOG_ERR("Failed to encode time status");
+    return ret;
+}
+
+void Humidifier::syncTimeSntp() {
+//     struct sntp_time sntp_time;
+//     // Try to sync with NTP server (timeout 5 seconds)
+//     int ret = sntp_query("pool.ntp.org", 123, &sntp_time, K_SECONDS(5));
+//     if (ret == 0) {
+//         // Convert SNTP time (seconds since 1900) to Unix epoch (seconds since 1970)
+//         currentTime = sntp_time.seconds - 2208988800UL;
+//         timeSynced = true;
+//         LOG_INF("Time synced via SNTP: %u (Unix epoch)", currentTime);
+//     } else {
+//         LOG_WRN("SNTP sync failed: %d (using uptime)", ret);
+//         timeSynced = false;
+//         currentTime = k_uptime_get() / 1000;  // Fallback to uptime
+//     }
+}
+
+void Humidifier:: setCredentials(char *ssid, char *password)
+{
+	strncpy(settings.credentials.ssid, ssid, strlen(ssid));
+	strncpy(settings.credentials.password, password, strlen(password));
 }

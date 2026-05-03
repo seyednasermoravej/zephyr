@@ -150,18 +150,21 @@ async function postFan() {
 }
 
 // --- Network ---
-async function fetchNetworkCbrightnessentials() {
+async function fetchCredentials() {
     try {
-        const res = await fetch("/cbrightnessentials");
+        const res = await fetch("/credentials");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const ssidInput = document.getElementById("network-ssid");
         if (ssidInput && data.ssid) ssidInput.value = data.ssid;
         // Password intentionally left blank for security
-    } catch (e) { console.warn("Could not fetch network cbrightnessentials:", e.message); }
+    } catch (e) { console.warn("Could not fetch network credentials:", e.message); }
 }
 
-async function saveNetworkCbrightnessentials() {
+async function saveNetworkCredentials() {
+    console.log("✅ Save button clicked!"); // <-- VERIFY THIS LOGS IN CONSOLE
+    event.preventDefault(); // Prevent accidental form submission
+
     const ssid = document.getElementById("network-ssid").value.trim();
     const password = document.getElementById("network-password").value;
     const statusEl = document.getElementById("network-status");
@@ -178,21 +181,25 @@ async function saveNetworkCbrightnessentials() {
     statusEl.textContent = "";
 
     try {
-        const res = await fetch("/cbrightnessentials", {
+        console.log("📡 Sending credentials to /credentials...");
+        const res = await fetch("/credentials", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ssid, password })
         });
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        statusEl.textContent = "✅ Cbrightnessentials saved. Device may reboot to apply.";
+
+        statusEl.textContent = "✅ Credentials saved. Device may reboot.";
         statusEl.className = "status-msg success";
-        document.getElementById("network-password").value = "";
+        document.getElementById("network-password").value = ""; // Clear password field
     } catch (e) {
-        statusEl.textContent = `❌ Failed: ${e.message}`;
+        console.error("❌ Save failed:", e);
+        statusEl.textContent = ` Failed: ${e.message}`;
         statusEl.className = "status-msg error";
     } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = "Save Cbrightnessentials";
+        saveBtn.textContent = "Save Credentials";
     }
 }
 
@@ -252,9 +259,9 @@ function bindFanControls() {
     }
 }
 
-function bindNetworkControls() {
+function bindCredentials() {
     const saveBtn = document.getElementById("network-save-btn");
-    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCbrightnessentials);
+    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCredentials);
 }
 
 // ==========================================
@@ -290,7 +297,7 @@ async function fetchPiezos() {
         const res = await fetch("/piezos");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        console.log("json is: ", data);
+        // console.log("json is: ", data);
         if (data.piezos && Array.isArray(data.piezos)) {
             data.piezos.forEach((p, idx) => {
                 if (idx >= 3) return;
@@ -433,14 +440,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Bind all controls
     bindPiezoControls();
     bindFanControls();
-    bindNetworkControls();
+    bindCredentials();
     bindPasswordToggle();
 
     // Init previews
     [0, 1, 2].forEach(updatePreview);
 
     // Fetch initial data
-    // fetchNetworkCbrightnessentials();
+    fetchCredentials();
     fetchUptime();
     setInterval(fetchUptime, 1000);
     fetchFan();
