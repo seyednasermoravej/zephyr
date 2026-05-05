@@ -135,8 +135,9 @@ void Humidifier:: setDefaultSettings()
 	settings.piezos.piezos[1].brightness = 10;
 	settings.piezos.piezos[2].brightness = 20;
 	settings.piezos.piezos[2].intensity = 20;
-	strncpy(settings.credentials.ssid, "Humidifier", strlen("Humidifier"));
-	strncpy(settings.credentials.password, "HumidifierPass", strlen("HumidifierPass"));
+	memcpy(settings.credentials.ssid, "Humidifier", strlen("Humidifier"));
+	memcpy(settings.credentials.password, "HumidifierPass", strlen("HumidifierPass"));
+	writeSettings();
 }
 
 // void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
@@ -188,10 +189,10 @@ void Humidifier:: setDefaultSettings()
 
 int Humidifier:: readInfosFromMemory()
 {
-	// nvsInit();
+	nvsInit();
 	// eraseStorage();
 	int rc = -1;
-	// rc = nvs_read(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
+	rc = nvs_read(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
 	if (rc < 0)
 	{
 		setDefaultSettings();
@@ -199,38 +200,38 @@ int Humidifier:: readInfosFromMemory()
 	return rc;
 }
 
-// int Humidifier:: nvsInit()
-// {
-// 	int rc;
-// 	struct flash_pages_info info;
-// 	fs = new(struct nvs_fs);
-// 	fs->flash_device = NVS_PARTITION_DEVICE;
-//     	if (!device_is_ready(fs->flash_device)) {
-// 		printk("Flash device %s is not ready\n", fs->flash_device->name);
-// 		return 0;
-// 	}
-// 	fs->offset = NVS_PARTITION_OFFSET;
-// 	rc = flash_get_page_info_by_offs(fs->flash_device, fs->offset, &info);
-// 	if (rc) {
-// 		printk("Unable to get page info, rc=%d\n", rc);
-// 		return 0;
-// 	}
-// 	fs->sector_size = info.size;
-// 	LOG_DBG("The page size is: %d", info.size);
-// 	fs->sector_count = 2U;
-// 	rc = nvs_mount(fs);
-// 	LOG_DBG("rc is: %d", rc);
+int Humidifier:: nvsInit()
+{
+	int rc;
+	struct flash_pages_info info;
+	fs = new(struct nvs_fs);
+	fs->flash_device = NVS_PARTITION_DEVICE;
+    	if (!device_is_ready(fs->flash_device)) {
+		printk("Flash device %s is not ready\n", fs->flash_device->name);
+		return 0;
+	}
+	fs->offset = NVS_PARTITION_OFFSET;
+	rc = flash_get_page_info_by_offs(fs->flash_device, fs->offset, &info);
+	if (rc) {
+		printk("Unable to get page info, rc=%d\n", rc);
+		return 0;
+	}
+	fs->sector_size = info.size;
+	LOG_DBG("The page size is: %d", info.size);
+	fs->sector_count = 2U;
+	rc = nvs_mount(fs);
+	LOG_DBG("rc is: %d", rc);
 
-// 	if (rc) {
-// 		flash_erase(fs->flash_device, NVS_PARTITION_OFFSET, fs->sector_count * fs->sector_size);
-// 		rc = nvs_mount(fs);
-// 		if (rc) {
-// 			printk("Flash Init failed, rc=%d\n", rc);
-// 			return 0;
-// 		}
-// 	}
-// 	return 0;
-// }
+	if (rc) {
+		flash_erase(fs->flash_device, NVS_PARTITION_OFFSET, fs->sector_count * fs->sector_size);
+		rc = nvs_mount(fs);
+		if (rc) {
+			printk("Flash Init failed, rc=%d\n", rc);
+			return 0;
+		}
+	}
+	return 0;
+}
 
 void Humidifier:: setPiezoPwm(uint8_t piezoNum,
 			uint8_t red,
@@ -420,4 +421,12 @@ void Humidifier:: setCredentials(char *ssid, char *password)
 {
 	strncpy(settings.credentials.ssid, ssid, strlen(ssid));
 	strncpy(settings.credentials.password, password, strlen(password));
+}
+
+int Humidifier:: writeSettings()
+{
+	int ret = -1;
+	// LOG_INF("size of settings is: %d", sizeof(settings));
+	ret = nvs_write(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
+	return ret;
 }
