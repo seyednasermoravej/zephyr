@@ -98,7 +98,7 @@ struct IpAddress
 struct Settings
 {
 	// uint64_t uptime;
-	uint8_t fanSpeed = 50;
+	uint8_t fanSpeed = 0;
 	struct PiezosStatus piezos = { 0 };
 	// struct IpAddress ipAddress = { 0 };
 	struct Credentials credentials = { 0 };
@@ -162,16 +162,17 @@ public:
 
 private:
 	struct Settings settings;
-	// struct nvs_fs *fs;
+	struct nvs_fs *fs;
 
 	int readInfosFromMemory();
-	// int nvsInit();
+	int nvsInit();
 	void setDefaultSettings();
 	void setPiezoPwm(uint8_t piezoNum, uint8_t red,	uint8_t green,
 			uint8_t blue, uint8_t intensity);
 	uint32_t currentTime;  // Store current Unix timestamp
 	bool timeSynced;
 	void setCredentials(char *ssid, char *psk);
+	int writeSettings();
 
 };
 
