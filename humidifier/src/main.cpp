@@ -607,10 +607,10 @@ int main(void)
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
-		.ssid = (uint8_t *)"Naser-Wi-Fi2",
-		.ssid_length = strlen("Naser-Wi-Fi2"),
-		.psk = (uint8_t *)"1020151515",
-		.psk_length = strlen("1020151515"),
+		.ssid = (uint8_t *)"Naser",
+		.ssid_length = strlen("Naser"),
+		.psk = (uint8_t *)"nasimore",
+		.psk_length = strlen("nasimore"),
 		// .ssid = "PAIDAR",
 		// .ssid_length = strlen("PAIDAR"),
 		// .psk = "Atal-Matal 347",

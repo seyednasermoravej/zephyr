@@ -154,8 +154,8 @@ public:
 	int fanStatus(char *buf, size_t bufSize);
 	int piezosStatus(char *buf, size_t bufSize);
 	int credentialStatus(char *buf, size_t bufSize);
-	// static void buttonsHandlerWrapper(struct input_event *val, void* userData);
-	// void buttonsHandler(struct input_event *val);
+	static void buttonsHandlerWrapper(struct input_event *val, void* userData);
+	void buttonsHandler(struct input_event *val);
     // Sync time on boot (non-blocking)
 	void syncTimeSntp();
 	int timeStatus(char *buf, size_t bufSize);
