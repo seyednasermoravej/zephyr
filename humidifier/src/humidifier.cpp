@@ -14,7 +14,8 @@ LOG_MODULE_REGISTER(humidifier, LOG_LEVEL_INF);
 // };
 
 // static Humidifier *instance = nullptr;
-// static const struct device *const buttons = DEVICE_DT_GET(buttons);
+// static const struct device *buttons = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(gpio_keys));
+// static const struct device *const buttons = DEVICE_DT_GET(DT_NODELABEL(humidifier_buttons));
 
 #define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
 extern Humidifier *humidifier;
@@ -22,8 +23,15 @@ static const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
 
 Humidifier:: Humidifier()
 {
+
 	LOG_INF("enter consgtructure");
+
 	readInfosFromMemory();
+
+	// if (!device_is_ready(buttons))
+	// {
+	// 	LOG_ERR("buttons is not ready.");
+	// }
 
 	currentTime = 0;
 	timeSynced = false;
@@ -140,27 +148,27 @@ void Humidifier:: setDefaultSettings()
 	writeSettings();
 }
 
-// void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
-// {
-//     humidifier->buttonsHandler(val);
-// }
-// void Humidifier:: buttonsHandler(struct input_event *val)
-// {
-//     if (val->type == INPUT_EV_KEY)
-//     {
-//         // if((val->code == INPUT_BTN_0)
-//         switch(val->code)
-// 	{
-// 		case INPUT_BTN_0:
+void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
+{
+    humidifier->buttonsHandler(val);
+}
+void Humidifier:: buttonsHandler(struct input_event *val)
+{
+    if (val->type == INPUT_EV_KEY)
+    {
+        // if((val->code == INPUT_BTN_0)
+        switch(val->code)
+	{
+		case INPUT_BTN_0:
 
-// 			break;
+			break;
 
-// 		case INPUT_BTN_1:
-// 			break;
+		case INPUT_BTN_1:
+			break;
 
-// 		case INPUT_BTN_2:
-// 			break;
-// 	};
+		case INPUT_BTN_2:
+			break;
+	};
 //         // {
 //         //     sprintf(msg.topic, "%sswitch1", instance->mqttCommand);
 //         //     val->value ? sprintf(msg.msg, "true"): sprintf(msg.msg, "false");
@@ -184,8 +192,8 @@ void Humidifier:: setDefaultSettings()
 //         //     }
 //         // }
 //         // k_msgq_put(&msqSendToMQTT, &msg, K_NO_WAIT);
-//     }
-// }
+    }
+}
 
 int Humidifier:: readInfosFromMemory()
 {
