@@ -14,11 +14,12 @@ LOG_MODULE_REGISTER(humidifier, LOG_LEVEL_INF);
 // };
 
 // static Humidifier *instance = nullptr;
-// static const struct device *buttons = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(gpio_keys));
-// static const struct device *const buttons = DEVICE_DT_GET(DT_NODELABEL(humidifier_buttons));
+// #define BUTTONS_NODE DT_PATH(buttons)
+
+static const struct device *const buttons = DEVICE_DT_GET(DT_PATH(buttons));
 
 #define LED_PWM_NODE_ID	 DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds)
-extern Humidifier *humidifier;
+static Humidifier *instance = nullptr;
 static const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
 
 Humidifier:: Humidifier()
@@ -124,8 +125,8 @@ Humidifier:: Humidifier()
 		return;
 	}
 #endif
-	// INPUT_CALLBACK_DEFINE(NULL, buttonsHandlerWrapper, (void *)this);
-	// INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
+	instance = this;
+	INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
 }
 
 void Humidifier:: setDefaultSettings()
@@ -150,23 +151,30 @@ void Humidifier:: setDefaultSettings()
 
 void Humidifier:: buttonsHandlerWrapper(struct input_event *val, void *userData)
 {
-    humidifier->buttonsHandler(val);
+    instance->buttonsHandler(val);
 }
 void Humidifier:: buttonsHandler(struct input_event *val)
 {
+	LOG_INF("button event type=%d code=%d value=%d",
+        val->type,
+        val->code,
+        val->value);
+
     if (val->type == INPUT_EV_KEY)
     {
         // if((val->code == INPUT_BTN_0)
         switch(val->code)
 	{
 		case INPUT_BTN_0:
-
+			LOG_INF("BTN_0 event value=%d", val->value);
 			break;
 
 		case INPUT_BTN_1:
+			LOG_INF("BTN_1 event value=%d", val->value);
 			break;
 
 		case INPUT_BTN_2:
+			LOG_INF("BTN_2 event value=%d", val->value);
 			break;
 	};
 //         // {
