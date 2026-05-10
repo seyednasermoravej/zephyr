@@ -602,15 +602,20 @@ static int init_usb(void)
 
 int main(void)
 {
+	LOG_INF("Besme Allah");
+	humidifier = new Humidifier();
 
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
+	char ssid[32] = { 0 };
+	char psk[32] = { 0 };
+	humidifier->getCredentials(ssid, psk);
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
-		.ssid = (uint8_t *)"Naser",
-		.ssid_length = strlen("Naser"),
-		.psk = (uint8_t *)"nasimore",
-		.psk_length = strlen("nasimore"),
+		.ssid = (uint8_t *)ssid,
+		.ssid_length = strlen(ssid),
+		.psk = (uint8_t *)psk,
+		.psk_length = strlen(psk),
 		// .ssid = "PAIDAR",
 		// .ssid_length = strlen("PAIDAR"),
 		// .psk = "Atal-Matal 347",
@@ -625,9 +630,6 @@ int main(void)
 #else
 	init_usb();
 #endif
-	LOG_INF("Besme Allah");
-	LOG_INF("sizeof Humidifier is: %d", sizeof(Humidifier));
-	humidifier = new Humidifier();
 
 	// int err;
 	http_server_start();
