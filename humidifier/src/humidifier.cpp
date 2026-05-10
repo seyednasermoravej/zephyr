@@ -446,3 +446,9 @@ int Humidifier:: writeSettings()
 	ret = nvs_write(fs, NVS_SETTINGS_ID, &settings, sizeof(struct Settings));
 	return ret;
 }
+
+void Humidifier::getCredentials(char *ssid, char *psk)
+{
+	strncpy(ssid, settings.credentials.ssid, strlen(settings.credentials.ssid));
+	strncpy(psk, settings.credentials.password, strlen(settings.credentials.password));
+}

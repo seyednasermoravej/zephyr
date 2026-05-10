@@ -159,6 +159,7 @@ public:
     // Sync time on boot (non-blocking)
 	void syncTimeSntp();
 	int timeStatus(char *buf, size_t bufSize);
+	void getCredentials(char *ssid, char *psk);
 
 private:
 	struct Settings settings;
