@@ -1,223 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Humidifier</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-            margin: 0; padding: 20px; background: #fafafa; color: #333; line-height: 1.5;
-        }
-        h1 { margin: 0 0 8px; font-size: 1.8rem; color: #222; }
-        .subtitle { margin: 0 0 24px; color: #666; font-size: 1rem; }
-
-        section {
-            background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
-            padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        section h2 {
-            margin: 0 0 12px; font-size: 1.3rem; color: #333;
-            border-bottom: 1px solid #eee; padding-bottom: 8px;
-        }
-        section p { margin: 0 0 16px; color: #555; }
-
-        /*clock panel*/
-        .clock-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px;
-            color: white;
-            margin: 15px 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        #clock-time {
-            font-size: 3rem;
-            font-weight: bold;
-            font-family: 'Courier New', monospace;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        #clock-date {
-            font-size: 1.2rem;
-            margin: 5px 0 10px 0;
-            opacity: 0.9;
-        }
-        .sync-status {
-            font-size: 0.85rem;
-            padding: 4px 12px;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.2);
-        }
-        .sync-status.synced {
-            background: #4caf50;
-        }
-        .sync-status.failed {
-            background: #f44336;
-        }
-        /* Piezo Panel */
-        .piezo-panel {
-            border: 1px solid #ddd; border-radius: 6px; padding: 14px 16px;
-            margin: 12px 0; background: #fcfcfc; border-left: 4px solid #66c;
-        }
-        .piezo-title {
-            font-weight: 600; margin-bottom: 12px; color: #333;
-            display: flex; align-items: center; gap: 10px;
-        }
-        .piezo-preview {
-            width: 28px; height: 28px; border: 1px solid #888; border-radius: 50%;
-            background: #000; flex-shrink: 0; box-shadow: inset 0 0 4px rgba(0,0,0,0.3);
-        }
-
-        /* Shared Controls */
-        .channel-row {
-            display: flex; align-items: center; margin: 8px 0; gap: 12px; flex-wrap: wrap;
-        }
-        .channel-label { width: 90px; font-weight: 500; font-size: 0.95rem; }
-        .channel-label.red { color: #c00; }
-        .channel-label.green { color: #090; }
-        .channel-label.blue { color: #00c; }
-        .channel-label.intensity { color: #66c; font-weight: 600; }
-
-        input[type="range"] {
-            flex: 1; max-width: 280px; min-width: 160px; cursor: pointer;
-        }
-        .intensity-input-group { display: flex; align-items: center; gap: 6px; }
-        .intensity-input {
-            width: 50px; text-align: center;
-            font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600;
-            padding: 3px 4px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 0.75rem; background: #fff;
-        }
-        .intensity-input:focus {
-            outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
-        }
-        .percent-sign { color: #777; font-size: 0.75rem; user-select: none; margin-left: 2px; }
-
-        /* Network Form */
-        .network-form { display: flex; flex-direction: column; gap: 12px; max-width: 380px; }
-        .form-group { display: flex; flex-direction: column; gap: 4px; }
-        .form-group label { font-weight: 500; font-size: 0.9rem; color: #444; }
-        .form-group input {
-            padding: 8px 10px; border: 1px solid #bbb; border-radius: 4px;
-            font-size: 0.95rem; font-family: inherit;
-        }
-        .form-group input:focus {
-            outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
-        }
-
-        /* Password Toggle Wrapper */
-        .password-wrapper {
-            display: flex; align-items: center;
-            border: 1px solid #bbb; border-radius: 4px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .password-wrapper:focus-within {
-            border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
-        }
-        .password-wrapper input {
-            flex: 1; padding: 8px 10px; border: none; background: transparent;
-            font-size: 0.95rem; font-family: inherit;
-        }
-        .password-wrapper input:focus { outline: none; box-shadow: none; }
-        .password-toggle-btn {
-            background: transparent; border: none; border-left: 1px solid #eee;
-            padding: 8px 10px; cursor: pointer; font-size: 1.1rem; color: #666;
-            transition: color 0.2s, background 0.2s;
-        }
-        .password-toggle-btn:hover { background: #f0f0f0; color: #333; }
-
-        .save-btn {
-            padding: 8px 16px; background: #0066cc; color: white; border: none;
-            border-radius: 4px; font-weight: 600; cursor: pointer; align-self: flex-start;
-            transition: background 0.2s; margin-top: 4px;
-        }
-        .save-btn:hover { background: #0052a3; }
-        .save-btn:disabled { background: #999; cursor: not-allowed; }
-        .status-msg { margin-top: 10px; font-size: 0.9rem; min-height: 1.2em; }
-        .status-msg.success { color: #090; }
-        .status-msg.error { color: #c00; }
-
-        /* Uptime */
-        #uptime {
-            font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 500;
-            background: #f0f4f8; padding: 8px 12px; border-radius: 4px; display: inline-block;
-        }
-
-        @media (max-width: 600px) {
-            .channel-row { flex-direction: column; align-items: flex-start; gap: 6px; }
-            .channel-label { width: auto; }
-            input[type="range"] { width: 100%; max-width: none; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Humidifier Control</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header>
+    <h1>💧 Humidifier</h1>
+    <div class="clock-box">
+      <div id="clock-time">--:--:--</div>
+      <div id="clock-date">Loading...</div>
+      <div id="clock-sync-status" class="sync-status offline">⏳ Syncing</div>
+    </div>
+  </header>
 
-    <header>
-        <h1>Humidifier</h1>
-        <p class="subtitle">Piezo Actuators • RGB LEDs • Fan • Network</p>
-    </header>
+  <main>
+    <div class="mode-selector">
+      <label for="system-mode">System Mode:</label>
+      <select id="system-mode">
+        <option value="manual" selected>🔧 Manual</option>
+        <option value="schedule">📅 Scheduling</option>
+      </select>
+    </div>
 
-    <section id="clock-section">
-        <h2>🕐 System Time</h2>
-        <div id="clock-display">
-            <span id="clock-time">--:--:--</span>
-            <span id="clock-date">Loading...</span>
-            <span id="clock-sync-status">⏳ Syncing...</span>
-        </div>
-    </section>
-    <!-- Piezo + LED -->
-    <section id="piezo-control-section">
-        <h2>⚙️ Piezo Actuator & RGB LED</h2>
-        <p>Adjust RGB for visual feedback. Set Piezo Power for actuator intensity (0–100%).</p>
-        <div id="piezo-panels-container"></div>
-    </section>
-
-    <!-- Fan -->
-    <section id="fan-control-section">
-        <h2>🌀 Fan Control</h2>
-        <p>Adjust fan speed (0–100%). Changes sync automatically.</p>
-        <div class="channel-row">
-            <span class="channel-label">Speed:</span>
-            <input type="range" id="fan_speed_slider" min="0" max="100" value="0" data-control="fan" data-channel="speed">
-            <div class="intensity-input-group">
-                <input type="number" id="fan_speed_input" class="intensity-input" min="0" max="100" value="0" data-control="fan" data-channel="speed">
-                <span class="percent-sign">%</span>
-            </div>
-        </div>
+    <section id="manual-panel" class="panel">
+      <h3>Active Piezo</h3>
+      <div class="piezo-bullets">
+        <label class="radio-card"><input type="radio" name="active-piezo" value="-1"><span>⛔ Off</span></label>
+        <label class="radio-card"><input type="radio" name="active-piezo" value="0" checked><span>● Piezo 0</span></label>
+        <label class="radio-card"><input type="radio" name="active-piezo" value="1"><span>● Piezo 1</span></label>
+        <label class="radio-card"><input type="radio" name="active-piezo" value="2"><span>● Piezo 2</span></label>
+      </div>
+      <div id="manual-controls" class="controls-card">
+        <div class="slider-group"><label>Brightness</label><div class="slider-row"><input type="range" id="m_br" min="0" max="100" value="50"><input type="number" id="m_br_in" min="0" max="100" value="50"></div></div>
+        <div class="slider-group"><label>Piezo Power</label><div class="slider-row"><input type="range" id="m_int" min="0" max="100" value="50"><input type="number" id="m_int_in" min="0" max="100" value="50"></div></div>
+      </div>
     </section>
 
-    <!-- Network Credentials -->
-    <section id="network-credential-section">
-        <h2>📶 Network Credentials</h2>
-        <p>Enter Wi-Fi SSID and Password. Click Save to apply. Device may reboot to reconnect.</p>
-        <div class="network-form">
-            <div class="form-group">
-                <label for="network-ssid">SSID:</label>
-                <input type="text" id="network-ssid" placeholder="Your_WiFi_Network" autocomplete="off">
-            </div>
-            <div class="form-group">
-                <label for="network-password">Password:</label>
-                <div class="password-wrapper">
-                    <input type="password" id="network-password" placeholder="Enter password" autocomplete="off">
-                    <button type="button" id="password-toggle" class="password-toggle-btn" aria-label="Toggle password visibility" title="Show password">👁️</button>
-                </div>
-            </div>
-            <button id="network-save-btn" class="button">Save Credentials</button>
-        </div>
-        <p id="network-status" class="status-msg"></p>
+    <section id="schedule-panel" class="panel hidden">
+      <div class="panel-header">
+        <h3>📅 Schedule Manager</h3>
+        <button id="add-schedule-btn" class="btn primary">+ New Schedule</button>
+      </div>
+      <div id="schedule-container"></div>
     </section>
 
-    <!-- System Status -->
-    <section id="system-status-section">
-        <h2>📊 System Status</h2>
-        <h3 style="margin:16px 0 8px; font-size:1.1rem;">Device Uptime</h3>
-        <p id="uptime">Loading…</p>
+    <section class="panel">
+      <h3>🌀 Fan Control</h3>
+      <div class="slider-row"><input type="range" id="fan_sl" min="0" max="100" value="50"><input type="number" id="fan_in" min="0" max="100" value="50"><span class="unit">%</span></div>
     </section>
 
-    <script src="main.js"></script>
+    <section class="panel">
+      <h3>📶 Network Credentials</h3>
+      <input type="text" id="net_ssid" placeholder="Wi-Fi SSID">
+      <div class="pass-group">
+        <input type="password" id="net_pass" placeholder="Password">
+        <button id="pass_toggle" type="button">👁️</button>
+      </div>
+      <button id="net_save" class="btn primary">Save Credentials</button>
+      <div id="net_status" class="status hidden"></div>
+    </section>
+
+    <footer>Uptime: <span id="uptime">Loading...</span></footer>
+  </main>
+  <script src="main.js"></script>
 </body>
 </html>
