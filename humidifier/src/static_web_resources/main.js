@@ -1,463 +1,290 @@
 // ==========================================
-// 1. DYNAMIC HTML GENERATION
+// STATE & CONFIG
 // ==========================================
-function createPiezoPanelHTML(piezoIndex) {
-    const channels = [
-        { name: 'brightness', class: 'brightness', label: 'Brightness' },
-        { name: 'intensity', class: 'intensity', label: 'Piezo Power' }
-    ];
-
-    const rowsHTML = channels.map(channel => {
-        const defaultValue = channel.name === 'intensity' ? 100 : 0;
-        const idBase = `piezo${piezoIndex}_${channel.name}`;
-
-        return `
-        <div class="channel-row">
-            <span class="channel-label ${channel.class}">${channel.label}:</span>
-            <input type="range" id="${idBase}_slider" min="0" max="100" value="${defaultValue}"
-                   data-piezo="${piezoIndex}" data-channel="${channel.name}">
-            <div class="intensity-input-group">
-                <input type="number" id="${idBase}_input" class="intensity-input" min="0" max="100" value="${defaultValue}"
-                       data-piezo="${piezoIndex}" data-channel="${channel.name}">
-                <span class="percent-sign">%</span>
-            </div>
-        </div>`;
-    }).join('');
-
-    return `
-     <div class="piezo-panel">
-        <div class="piezo-title">
-            Piezo ${piezoIndex}
-            <span class="piezo-preview" id="preview_${piezoIndex}"></span>
-        </div>
-
-        <!-- MODE (RADIO BUTTONS) -->
-        <div class="piezo-mode">
-            <label><strong>Mode:</strong></label>
-
-            <label>
-                <input type="radio" name="mode_${piezoIndex}" value="off" data-piezo="${piezoIndex}">
-                Off
-            </label>
-
-            <label>
-                <input type="radio" name="mode_${piezoIndex}" value="manual" data-piezo="${piezoIndex}" checked>
-                Manual
-            </label>
-
-            <label>
-                <input type="radio" name="mode_${piezoIndex}" value="schedule" data-piezo="${piezoIndex}">
-                Scheduling
-            </label>
-
-            <!-- SCHEDULE INPUTS -->
-            <div id="schedule_${piezoIndex}" style="margin-top:10px;">
-                <label>Start:</label>
-                <input
-                    type="time"
-                    step="60"
-                    min="00:00"
-                    max="23:59"
-                    data-piezo="${piezoIndex}"
-                    class="schedule-start">
-
-                <label>End:</label>
-                <input
-                    type="time"
-                    step="60"
-                    min="00:00"
-                    max="23:59"
-                    data-piezo="${piezoIndex}"
-                    class="schedule-end">
-            </div>
-        </div>
-
-        ${rowsHTML}
-    </div>`;
-}
-
-// ==========================================
-// 2. STATE & CORE LOGIC
-// ==========================================
-const piezosState = {
-    0: {  brightness: 0, intensity: 100, timeout: null },
-    1: {  brightness: 0, intensity: 100, timeout: null },
-    2: {  brightness: 0, intensity: 100, timeout: null }
-};
-const fanState = { speed: 0, timeout: null };
-
-function clamp(val) {
-    const num = parseInt(val, 10);
-    return isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
-}
-
-// --- Piezo ---
-function updatePiezoState(piezoIndex, channel, value) {
-    const state = piezosState[piezoIndex];
-    if (!state) return;
-    if (channel === 'intensity') state.intensity = value;
-    if (channel === 'brightness') state.brightness = value;
-    state.lastLocalUpdate = Date.now();
-}
-
-function scheduleSend(piezoIndex) {
-    const state = piezosState[piezoIndex];
-    if (!state) return;
-    clearTimeout(state.timeout);
-    state.timeout = setTimeout(() => postPiezo(piezoIndex), 300);
-}
-
-function updatePreview(piezoIndex) {
-    const state = piezosState[piezoIndex];
-    if (!state) return;
-
-    const b = Math.round(state.brightness * 2.55);
-
-    const preview = document.getElementById(`preview_${piezoIndex}`);
-    if (preview) preview.style.background = `rgb(${b}, ${b}, ${b})`;
-}
-
-async function postPiezo(piezoIndex) {
-    try {
-        const res = await fetch("/piezos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                piezoNum: parseInt(piezoIndex),
-                brightness: piezosState[piezoIndex].brightness,
-                intensity: piezosState[piezoIndex].intensity
-            })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e) { console.error(`Failed to update Piezo ${piezoIndex}:`, e.message); }
-}
-
-// --- Fan ---
-function scheduleFanSend() {
-    clearTimeout(fanState.timeout);
-    fanState.timeout = setTimeout(postFan, 300);
-}
-
-async function postFan() {
-    try {
-        const res = await fetch("/fan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ speed: fanState.speed })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e) { console.error("Failed to update fan:", e.message); }
-}
-
-// --- Network ---
-async function fetchCredentials() {
-    try {
-        const res = await fetch("/credentials");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const ssidInput = document.getElementById("network-ssid");
-        if (ssidInput && data.ssid) ssidInput.value = data.ssid;
-        // Password intentionally left blank for security
-    } catch (e) { console.warn("Could not fetch network credentials:", e.message); }
-}
-
-async function saveNetworkCredentials() {
-    console.log("✅ Save button clicked!"); // <-- VERIFY THIS LOGS IN CONSOLE
-    event.preventDefault(); // Prevent accidental form submission
-
-    const ssid = document.getElementById("network-ssid").value.trim();
-    const password = document.getElementById("network-password").value;
-    const statusEl = document.getElementById("network-status");
-    const saveBtn = document.getElementById("network-save-btn");
-
-    if (!ssid) {
-        statusEl.textContent = "SSID cannot be empty.";
-        statusEl.className = "status-msg error";
-        return;
-    }
-
-    saveBtn.disabled = true;
-    saveBtn.textContent = "Saving...";
-    statusEl.textContent = "";
-
-    try {
-        console.log("📡 Sending credentials to /credentials...");
-        const res = await fetch("/credentials", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ssid, password })
-        });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        statusEl.textContent = "✅ Credentials saved. Device may reboot.";
-        statusEl.className = "status-msg success";
-        document.getElementById("network-password").value = ""; // Clear password field
-    } catch (e) {
-        console.error("❌ Save failed:", e);
-        statusEl.textContent = ` Failed: ${e.message}`;
-        statusEl.className = "status-msg error";
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Save Credentials";
-    }
-}
-
-// ==========================================
-// 3. EVENT BINDING
-// ==========================================
-function bindPiezoControls() {
-    function handlePiezoChange(element, isFinal = false) {
-        const piezoIdx = element.dataset.piezo;
-        const channel = element.dataset.channel;
-        const isSlider = element.type === 'range';
-        let value = isSlider ? parseInt(element.value, 10) : parseFloat(element.value);
-        if (isNaN(value)) value = 0;
-        const clamped = clamp(value);
-
-        const counterpartId = `piezo${piezoIdx}_${channel}_${isSlider ? 'input' : 'slider'}`;
-        const counterpart = document.getElementById(counterpartId);
-        if (counterpart) counterpart.value = clamped;
-
-        updatePiezoState(piezoIdx, channel, clamped);
-        updatePreview(piezoIdx);
-        if (isSlider || isFinal) scheduleSend(piezoIdx);
-    }
-
-    document.querySelectorAll('input[type="range"][data-piezo]').forEach(slider => {
-        slider.addEventListener('input', e => handlePiezoChange(e.target, false));
-    });
-    document.querySelectorAll('input[type="number"][data-piezo]').forEach(input => {
-        input.addEventListener('input', e => handlePiezoChange(e.target, false));
-        input.addEventListener('change', e => handlePiezoChange(e.target, true));
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
-    });
-}
-
-function bindFanControls() {
-    function handleFanChange(element, isFinal = false) {
-        const isSlider = element.type === 'range';
-        let value = isSlider ? parseInt(element.value, 10) : parseFloat(element.value);
-        if (isNaN(value)) value = 0;
-        const clamped = clamp(value);
-
-        const counterpartId = `fan_speed_${isSlider ? 'input' : 'slider'}`;
-        const counterpart = document.getElementById(counterpartId);
-        if (counterpart) counterpart.value = clamped;
-
-        fanState.speed = clamped;
-        if (isSlider || isFinal) scheduleFanSend();
-    }
-
-    const fanSlider = document.getElementById('fan_speed_slider');
-    const fanInput = document.getElementById('fan_speed_input');
-    if (fanSlider) fanSlider.addEventListener('input', e => handleFanChange(e.target, false));
-    if (fanInput) {
-        fanInput.addEventListener('input', e => handleFanChange(e.target, false));
-        fanInput.addEventListener('change', e => handleFanChange(e.target, true));
-        fanInput.addEventListener('keydown', e => { if (e.key === 'Enter') fanInput.blur(); });
-    }
-}
-
-function bindCredentials() {
-    const saveBtn = document.getElementById("network-save-btn");
-    if (saveBtn) saveBtn.addEventListener("click", saveNetworkCredentials);
-}
-
-// ==========================================
-// 4. UPTIME FEATURE
-// ==========================================
-
-async function fetchFan() {
-    try {
-        const res = await fetch("/fan");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const json = await res.json();
-
-        const slider = document.getElementById("fan_speed_slider");
-        const input = document.getElementById("fan_speed_input");
-
-        if(slider) slider.value = json.speed
-        if(input) input.value = json.speed
-    } catch (e) { console.error("fan speed fetch error:", e.message); }
-}
-
-async function fetchUptime() {
-    try {
-        const res = await fetch("/uptime");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const el = document.getElementById("uptime");
-        if (el) el.textContent = `Uptime: ${json} milliseconds`;
-    } catch (e) { console.error("Uptime fetch error:", e.message); }
-}
-async function fetchPiezos() {
-    try {
-        const res = await fetch("/piezos");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        // console.log("json is: ", data);
-        if (data.piezos && Array.isArray(data.piezos)) {
-            data.piezos.forEach((p, idx) => {
-                if (idx >= 3) return;
-                const state = piezosState[idx];
-                if (!state) return;
-
-                const RECENT_CHANGE_WINDOW_MS = 2000;
-                if (Date.now() - state.lastLocalUpdate < RECENT_CHANGE_WINDOW_MS) {
-                    return; // Don't overwrite user's recent change
-                }
-
-                const b = p.brightness;
-                const intensity = p.intensity;
-
-                state.brightness = b;
-                state.intensity = intensity;
-                state.lastLocalUpdate = 0;
-
-                // Update UI sliders/inputs
-                const setVal = (channel, val) => {
-                    const slider = document.getElementById(`piezo${idx}_${channel}_slider`);
-                    const input = document.getElementById(`piezo${idx}_${channel}_input`);
-                    if (slider) slider.value = val;
-                    if (input) input.value = val;
-                };
-
-                setVal('brightness', b);
-                setVal('intensity', intensity);
-                updatePreview(idx);
-            });
-        }
-    } catch (e) { console.error("Piezos fetch error:", e.message); }
-}
-// ==========================================
-// PASSWORD TOGGLE LOGIC
-// ==========================================
-function bindPasswordToggle() {
-    const pwdInput = document.getElementById('network-password');
-    const toggleBtn = document.getElementById('password-toggle');
-    if (!pwdInput || !toggleBtn) return;
-
-    toggleBtn.addEventListener('click', () => {
-        const isHidden = pwdInput.type === 'password';
-        pwdInput.type = isHidden ? 'text' : 'password';
-        toggleBtn.textContent = isHidden ? '🙈' : '👁️';
-        toggleBtn.title = isHidden ? 'Hide password' : 'Show password';
-        toggleBtn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-    });
-}
-// ==========================================
-// 6. CLOCK FEATURE
-// ==========================================
-const timeState = {
-    timestamp: 0,
-    synced: false,
-    lastFetch: 0,
-    updateInterval: null
+const state = {
+  mode: 'manual',
+  activePiezo: 0,
+  piezos: [
+    { brightness: 50, intensity: 50 },
+    { brightness: 50, intensity: 50 },
+    { brightness: 50, intensity: 50 }
+  ],
+  fan: 50,
+  schedules: [],
+  timeouts: { piezo: null, fan: null }
 };
 
-// Format Unix timestamp to readable time/date
-function formatTime(timestamp) {
-    const date = new Date(timestamp * 1000); // JS uses milliseconds
-    return {
-        time: date.toLocaleTimeString('en-US', { hour12: false }),
-        date: date.toLocaleDateString('en-US', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        })
+function clamp(val) { return Math.max(0, Math.min(100, parseInt(val, 10) || 0)); }
+
+// ==========================================
+// SYNC LOGIC
+// ==========================================
+function syncPiezo() {
+  clearTimeout(state.timeouts.piezo);
+  state.timeouts.piezo = setTimeout(async () => {
+    if (state.activePiezo === -1) return;
+    const p = state.piezos[state.activePiezo];
+    try {
+      await fetch('/piezos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ piezoNum: state.activePiezo, brightness: p.brightness, intensity: p.intensity })
+      });
+    } catch (e) { console.warn('Piezo sync failed:', e.message); }
+  }, 250);
+}
+
+function syncFan() {
+  clearTimeout(state.timeouts.fan);
+  state.timeouts.fan = setTimeout(async () => {
+    try {
+      await fetch('/fan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speed: state.fan }) });
+    } catch (e) { console.warn('Fan sync failed:', e.message); }
+  }, 250);
+}
+
+// ==========================================
+// MANUAL MODE
+// ==========================================
+function bindModeSelector() {
+  const sel = document.getElementById('system-mode');
+  const mPanel = document.getElementById('manual-panel');
+  const sPanel = document.getElementById('schedule-panel');
+  sel.addEventListener('change', e => {
+    state.mode = e.target.value;
+    mPanel.classList.toggle('hidden', state.mode !== 'manual');
+    sPanel.classList.toggle('hidden', state.mode !== 'schedule');
+  });
+}
+
+function bindPiezoBullets() {
+  document.querySelectorAll('input[name="active-piezo"]').forEach(r => {
+    r.checked = parseInt(r.value) === state.activePiezo;
+    r.addEventListener('change', e => {
+      state.activePiezo = parseInt(e.target.value);
+      const idx = state.activePiezo === -1 ? 0 : state.activePiezo;
+      document.getElementById('m_br').value = state.piezos[idx].brightness;
+      document.getElementById('m_br_in').value = state.piezos[idx].brightness;
+      document.getElementById('m_int').value = state.piezos[idx].intensity;
+      document.getElementById('m_int_in').value = state.piezos[idx].intensity;
+      document.querySelectorAll('#manual-controls input').forEach(i => i.disabled = state.activePiezo === -1);
+      syncPiezo();
+    });
+  });
+}
+
+function bindManualSliders() {
+  const pair = (sId, iId, ch) => {
+    const s = document.getElementById(sId), i = document.getElementById(iId);
+    if (!s || !i) return;
+    const up = v => { 
+      const c = clamp(v); s.value = c; i.value = c; 
+      state.piezos[state.activePiezo === -1 ? 0 : state.activePiezo][ch] = c; 
+      if (state.activePiezo !== -1) syncPiezo(); 
     };
+    s.oninput = e => up(e.target.value);
+    i.oninput = e => up(e.target.value);
+    i.onkeydown = e => { if(e.key==='Enter') i.blur(); };
+  };
+  pair('m_br', 'm_br_in', 'brightness');
+  pair('m_int', 'm_int_in', 'intensity');
 }
 
-// Update clock display (called every second)
-function updateClockDisplay() {
-    if (!timeState.timestamp) return;
-
-    // Calculate current time based on last sync + elapsed time
-    const now = Math.floor(Date.now() / 1000);
-    const elapsed = now - timeState.lastFetch;
-    const displayTime = new Date((timeState.timestamp + elapsed) * 1000);
-
-    const timeEl = document.getElementById('clock-time');
-    const dateEl = document.getElementById('clock-date');
-    const syncEl = document.getElementById('clock-sync-status');
-
-    if (timeEl) {
-        timeEl.textContent = displayTime.toLocaleTimeString('en-US', { hour12: false });
-    }
-    if (dateEl) {
-        dateEl.textContent = displayTime.toLocaleDateString('en-US', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
-    }
-    if (syncEl) {
-        syncEl.textContent = timeState.synced ? '✅ Synced' : '⚠️ Not Synced';
-        syncEl.className = `sync-status ${timeState.synced ? 'synced' : 'failed'}`;
-    }
+function bindFan() {
+  const s = document.getElementById('fan_sl'), i = document.getElementById('fan_in');
+  s.oninput = () => { i.value = s.value; state.fan = clamp(s.value); syncFan(); };
+  i.onchange = () => { s.value = i.value; state.fan = clamp(i.value); syncFan(); };
 }
 
-// Fetch time from backend
-async function fetchTime() {
-    try {
-        const res = await fetch('/time');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        timeState.timestamp = data.timestamp;
-        timeState.synced = data.synced;
-        timeState.lastFetch = Math.floor(Date.now() / 1000);
-
-        updateClockDisplay();
-    } catch (e) {
-        console.error("Time fetch error:", e.message);
-        const syncEl = document.getElementById('clock-sync-status');
-        if (syncEl) {
-            syncEl.textContent = '❌ Error';
-            syncEl.className = 'sync-status failed';
-        }
-    }
-}
 // ==========================================
-// 5. INITIALIZATION
+// SCHEDULING MODULE
 // ==========================================
-document.addEventListener("DOMContentLoaded", () => {
-    // Generate Piezo panels
-    const container = document.getElementById('piezo-panels-container');
-    if (container) {
-        let panelsHTML = '';
-        for (let i = 0; i < 3; i++) {
-            panelsHTML += createPiezoPanelHTML(i);
-            if (!piezosState[i]) piezosState[i] = { brightness: 0, intensity: 100, timeout: null };
-        }
-        container.innerHTML = panelsHTML;
+function timeToMin(t) { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m; }
+
+// DAY-AWARE OVERLAP DETECTION
+function hasScheduleOverlap(schedA, schedB) {
+  // 1. Check if they share ANY common day
+  const sharesDay = schedA.days.some(d => schedB.days.includes(d));
+  if (!sharesDay) return false; // Different days = never overlaps
+
+  // 2. If days overlap, check time intersection
+  const sA = timeToMin(schedA.start), eA = timeToMin(schedA.end);
+  const sB = timeToMin(schedB.start), eB = timeToMin(schedB.end);
+
+  if (sA >= eA || sB >= eB) return false; // Invalid time ranges don't trigger overlap warnings
+  return sA < eB && sB < eA; // Standard interval overlap check
+}
+
+function checkOverlap(target, excludeId) {
+  return state.schedules.some(s => s.id !== excludeId && hasScheduleOverlap(target, s));
+}
+
+function renderSchedules() {
+  const con = document.getElementById('schedule-container');
+  if (!con) return;
+  con.innerHTML = state.schedules.map(s => {
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const inv = checkOverlap(s, s.id);
+    return `
+      <div class="schedule-card ${inv?'invalid':''}" data-id="${s.id}">
+        <button class="delete-btn" data-id="${s.id}">✕</button>
+        <div class="sched-row">
+          <label>Start <input type="time" class="s-st" value="${s.start}"></label>
+          <label>End <input type="time" class="s-en" value="${s.end}"></label>
+        </div>
+        <div class="days-row">${days.map((d,i)=>`<label class="day-chip"><input type="checkbox" data-day="${i}" ${s.days.includes(i)?'checked':''}>${d}</label>`).join('')}</div>
+        <div class="piezo-row">
+          <span>Piezo:</span>
+          <label><input type="radio" name="sp_${s.id}" value="0" ${s.piezo===0?'checked':''}><span class="bullet">●</span>P0</label>
+          <label><input type="radio" name="sp_${s.id}" value="1" ${s.piezo===1?'checked':''}><span class="bullet">●</span>P1</label>
+          <label><input type="radio" name="sp_${s.id}" value="2" ${s.piezo===2?'checked':''}><span class="bullet">●</span>P2</label>
+        </div>
+        <div class="controls-card">
+          <div class="slider-group"><label>Brightness</label><div class="slider-row"><input type="range" class="s-br-s" min="0" max="100" value="${s.brightness}"><input type="number" class="s-br-i" min="0" max="100" value="${s.brightness}"></div></div>
+          <div class="slider-group"><label>Intensity</label><div class="slider-row"><input type="range" class="s-int-s" min="0" max="100" value="${s.intensity}"><input type="number" class="s-int-i" min="0" max="100" value="${s.intensity}"></div></div>
+        </div>
+        <button class="btn save-btn" data-id="${s.id}" ${inv?'disabled':''}>💾 Save Schedule</button>
+        <div class="status hidden" data-id="${s.id}"></div>
+      </div>`;
+  }).join('');
+  bindScheduleCards();
+}
+
+function bindScheduleCards() {
+  document.querySelectorAll('.delete-btn').forEach(b => b.onclick = () => {
+    state.schedules = state.schedules.filter(s => s.id !== parseInt(b.dataset.id));
+    renderSchedules();
+  });
+
+  document.querySelectorAll('.schedule-card').forEach(card => {
+    const id = parseInt(card.dataset.id);
+    const sch = state.schedules.find(s => s.id === id);
+    if (!sch) return;
+
+    const setStatus = (msg, type) => {
+      const el = card.querySelector('.status');
+      el.textContent = msg; el.className = `status ${type}`;
+    };
+
+    card.querySelector('.s-st').onchange = e => { sch.start = e.target.value; refreshCardUI(card); };
+    card.querySelector('.s-en').onchange = e => { sch.end = e.target.value; refreshCardUI(card); };
+    card.querySelectorAll('input[data-day]').forEach(cb => cb.onchange = e => {
+      const d = parseInt(e.target.dataset.day);
+      sch.days = e.target.checked ? [...new Set([...sch.days, d])] : sch.days.filter(x => x!==d);
+      refreshCardUI(card);
+    });
+    card.querySelectorAll('input[type="radio"]').forEach(r => r.onchange = e => { sch.piezo = parseInt(e.target.value); refreshCardUI(card); });
+
+    const bindSl = (clsS, clsI, key) => {
+      const s = card.querySelector(clsS), i = card.querySelector(clsI);
+      s.oninput = () => { i.value = s.value; sch[key] = clamp(s.value); refreshCardUI(card); };
+      i.onchange = () => { s.value = i.value; sch[key] = clamp(i.value); refreshCardUI(card); };
+    };
+    bindSl('.s-br-s', '.s-br-i', 'brightness');
+    bindSl('.s-int-s', '.s-int-i', 'intensity');
+
+    card.querySelector('.save-btn').onclick = async () => {
+      const btn = card.querySelector('.save-btn');
+      if (checkOverlap(sch, sch.id)) {
+        setStatus('⚠️ Time overlaps on selected days.', 'error');
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        await fetch('/schedules', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({schedule:sch}) });
+        setStatus('✅ Saved successfully!', 'success');
+        setTimeout(()=>setStatus('','hidden'), 2000);
+      } catch(e) { setStatus(`❌ ${e.message}`, 'error'); }
+      finally { btn.disabled = false; btn.textContent = '💾 Save Schedule'; }
+    };
+  });
+}
+
+function refreshCardUI(card) {
+  const id = parseInt(card.dataset.id);
+  const sch = state.schedules.find(s => s.id === id);
+  const inv = checkOverlap(sch, sch.id);
+  card.classList.toggle('invalid', inv);
+  card.querySelector('.save-btn').disabled = inv;
+}
+
+document.getElementById('add-schedule-btn').onclick = () => {
+  state.schedules.push({ id: Date.now(), start:'08:00', end:'09:00', days:[], piezo:0, brightness:50, intensity:50 });
+  renderSchedules();
+};
+
+// ==========================================
+// NETWORK & SYSTEM FEATURES
+// ==========================================
+document.getElementById('net_save').onclick = async (e) => {
+  e.preventDefault();
+  const btn = e.target, status = document.getElementById('net_status');
+  const ssid = document.getElementById('net_ssid').value.trim();
+  const pass = document.getElementById('net_pass').value;
+  if (!ssid) { status.textContent = 'SSID required'; status.className = 'status error'; return; }
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    await fetch('/credentials', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ssid, password:pass}) });
+    status.textContent = '✅ Saved.'; status.className = 'status success';
+    document.getElementById('net_pass').value = '';
+  } catch(err) { status.textContent = `❌ ${err.message}`; status.className = 'status error'; }
+  finally { btn.disabled = false; btn.textContent = 'Save Credentials'; }
+};
+
+document.getElementById('pass_toggle').onclick = () => {
+  const p = document.getElementById('net_pass');
+  p.type = p.type === 'password' ? 'text' : 'password';
+  document.getElementById('pass_toggle').textContent = p.type === 'password' ? '👁️' : '🙈';
+};
+
+// ==========================================
+// FETCH & INIT
+// ==========================================
+async function fetchInitialData() {
+  try {
+    const p = await fetch('/piezos');
+    if (p.ok) {
+      const d = await p.json();
+      if (d.active !== undefined) state.activePiezo = d.active;
+      d.piezos?.forEach((v,i) => { if(i<3){ state.piezos[i].brightness = v.brightness||50; state.piezos[i].intensity = v.intensity||50; }});
     }
+    const f = await fetch('/fan');
+    if (f.ok) state.fan = (await f.json()).speed || 50;
+    
+    document.querySelector(`input[name="active-piezo"][value="${state.activePiezo}"]`).checked = true;
+    const idx = state.activePiezo === -1 ? 0 : state.activePiezo;
+    document.getElementById('m_br').value = state.piezos[idx].brightness; document.getElementById('m_br_in').value = state.piezos[idx].brightness;
+    document.getElementById('m_int').value = state.piezos[idx].intensity; document.getElementById('m_int_in').value = state.piezos[idx].intensity;
+    document.getElementById('fan_sl').value = state.fan; document.getElementById('fan_in').value = state.fan;
+    document.querySelectorAll('#manual-controls input').forEach(i => i.disabled = state.activePiezo === -1);
 
-    // Bind all controls
-    bindPiezoControls();
-    bindFanControls();
-    bindCredentials();
-    bindPasswordToggle();
+    const c = await fetch('/credentials');
+    if (c.ok) document.getElementById('net_ssid').value = (await c.json()).ssid || '';
+  } catch(e) { console.warn('Init fetch failed:', e.message); }
+}
 
-    // Init previews
-    [0, 1, 2].forEach(updatePreview);
+const clk = { ts:0, sync:false, last:0 };
+async function updateClock() {
+  try {
+    const r = await fetch('/time'); if(r.ok){const d=await r.json(); clk.ts=d.timestamp; clk.sync=d.synced; clk.last=Math.floor(Date.now()/1000);}
+  } catch(e){}
+  const now = new Date((clk.ts + Math.floor((Date.now()/1000)-clk.last))*1000);
+  document.getElementById('clock-time').textContent = now.toLocaleTimeString('en-GB');
+  document.getElementById('clock-date').textContent = now.toLocaleDateString('en-GB');
+  const el = document.getElementById('clock-sync-status');
+  el.textContent = clk.sync?'✅ Synced':'⏳ Offline';
+  el.className = `sync-status ${clk.sync?'synced':'offline'}`;
+}
 
-    // Fetch initial data
-    fetchCredentials();
-    fetchUptime();
-    setInterval(fetchUptime, 1000);
-    fetchFan();
-    setInterval(fetchFan, 500);
-    fetchPiezos();
-    setInterval(fetchPiezos, 500);
+setInterval(async()=>{ try{const r=await fetch('/uptime'); if(r.ok)document.getElementById('uptime').textContent=`${await r.text()} ms`;}catch(e){}},1000);
 
-    fetchTime();
-    // Update display every second for live clock
-    timeState.updateInterval = setInterval(updateClockDisplay, 1000);
-    // Re-fetch from backend every 60s to stay in sync
-    setInterval(fetchTime, 60000);
+document.addEventListener('DOMContentLoaded', () => {
+  bindModeSelector();
+  bindPiezoBullets();
+  bindManualSliders();
+  bindFan();
+  fetchInitialData();
+  renderSchedules();
+  updateClock();
+  setInterval(updateClock, 1000);
 });
