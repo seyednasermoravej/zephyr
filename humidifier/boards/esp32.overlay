@@ -52,6 +52,14 @@
 		};
 	};
 
+	piezo_selector
+	{
+		compatible = "power-switch";
+		gpios = <&gpio0 22 GPIO_ACTIVE_LOW>,
+			<&gpio0 23 GPIO_ACTIVE_LOW>,
+			<&gpio0 21 GPIO_ACTIVE_LOW>;
+	};
+
 	buttons
 	{
 		compatible = "gpio-keys";
@@ -77,13 +85,13 @@
 
 	zephyr,user
 	{
-		io-channels = <&adc1 0>;
-		// zephyr,deferred-init;
+		io-channels = <&adc0 0>;
 	};
 
 };
 
-&adc1 {
+&adc0 {
+	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 
@@ -176,12 +184,3 @@
                 timer = <0>;
         };
 };
-
-// &mcpwm0 {
-// 	pinctrl-0 = <&mcpwm0_default>;
-// 	pinctrl-names = "default";
-// 	status = "okay";
-// 	prescale = <93>;
-// 	prescale-timer0 = <103>;
-
-// };

@@ -20,11 +20,12 @@
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/net/net_config.h>
 
+#include <time.h>
+
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
 #include <zephyr/net/wifi.h>
 #include <zephyr/net/wifi_mgmt.h>
 #endif
-
 #if CONFIG_USB_DEVICE_STACK_NEXT
 #include <sample_usbd.h>
 extern "C" struct usbd_context *sample_usbd_init_device(usbd_msg_cb_t msg_cb);
@@ -43,6 +44,10 @@ static uint8_t index_html_gz[] = {
 
 static uint8_t main_js_gz[] = {
 #include "main.js.gz.inc"
+};
+
+static uint8_t style_css_gz[] = {
+#include "style.css.gz.inc"
 };
 
 struct http_resource_detail_static index_html_gz_resource_detail = {
@@ -67,6 +72,17 @@ static struct http_resource_detail_static main_js_gz_resource_detail = {
 		},
 	.static_data = main_js_gz,
 	.static_data_len = sizeof(main_js_gz),
+};
+
+static struct http_resource_detail_static style_css_gz_resource_detail = {
+    .common = {
+        .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+        .type = HTTP_RESOURCE_TYPE_STATIC,
+        .content_encoding = "gzip",
+        .content_type = "text/css",
+    },
+    .static_data = style_css_gz,
+    .static_data_len = sizeof(style_css_gz),
 };
 
 static int echo_handler(struct http_client_ctx *client, enum http_transaction_status status,
@@ -488,6 +504,9 @@ HTTP_RESOURCE_DEFINE(index_html_gz_resource, test_http_service, "/",
 HTTP_RESOURCE_DEFINE(main_js_gz_resource, test_http_service, "/main.js",
 		     &main_js_gz_resource_detail);
 
+HTTP_RESOURCE_DEFINE(style_css_gz_resource, test_http_service, "/style.css",
+			&style_css_gz_resource_detail);
+
 HTTP_RESOURCE_DEFINE(echo_resource, test_http_service, "/dynamic", &echo_resource_detail);
 
 HTTP_RESOURCE_DEFINE(uptime_resource, test_http_service, "/uptime", &uptime_resource_detail);
@@ -603,12 +622,13 @@ static int init_usb(void)
 int main(void)
 {
 	LOG_INF("Besme Allah");
-	humidifier = new Humidifier();
 
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
-	char ssid[32] = { 0 };
-	char psk[32] = { 0 };
-	humidifier->getCredentials(ssid, psk);
+	char ssid[] = "Naser-Wi-Fi";
+	// char ssid[32] = { 0 };
+	// char psk[32] = { 0 };
+	char psk[] = "1020151515";
+	// humidifier->getCredentials(ssid, psk);
 	struct net_if *iface = net_if_get_default();
 
 	struct wifi_connect_req_params connect_params = {
@@ -630,8 +650,8 @@ int main(void)
 #else
 	init_usb();
 #endif
-
-	// int err;
+	// k_sleep(K_SECONDS(5));
+	humidifier = new Humidifier();
 	http_server_start();
 	return 0;
 }

@@ -10,21 +10,23 @@
   <header>
     <h1>💧 Humidifier</h1>
     <div class="clock-box">
-      <div id="clock-time">--:--:--</div>
-      <div id="clock-date">Loading...</div>
-      <div id="clock-sync-status" class="sync-status offline">⏳ Syncing</div>
+      <span id="clock-time">--:--:--</span>
+      <span id="clock-date">Loading...</span>
+      <span id="clock-sync-status" class="sync-status offline">⏳ Syncing</span>
     </div>
   </header>
 
   <main>
+    <!-- MODE SELECTOR -->
     <div class="mode-selector">
       <label for="system-mode">System Mode:</label>
       <select id="system-mode">
         <option value="manual" selected>🔧 Manual</option>
-        <option value="schedule">📅 Scheduling</option>
+        <option value="schedule"> Scheduling</option>
       </select>
     </div>
 
+    <!-- MANUAL MODE PANEL -->
     <section id="manual-panel" class="panel">
       <h3>Active Piezo</h3>
       <div class="piezo-bullets">
@@ -33,12 +35,20 @@
         <label class="radio-card"><input type="radio" name="active-piezo" value="1"><span>● Piezo 1</span></label>
         <label class="radio-card"><input type="radio" name="active-piezo" value="2"><span>● Piezo 2</span></label>
       </div>
+      
       <div id="manual-controls" class="controls-card">
-        <div class="slider-group"><label>Brightness</label><div class="slider-row"><input type="range" id="m_br" min="0" max="100" value="50"><input type="number" id="m_br_in" min="0" max="100" value="50"></div></div>
-        <div class="slider-group"><label>Piezo Power</label><div class="slider-row"><input type="range" id="m_int" min="0" max="100" value="50"><input type="number" id="m_int_in" min="0" max="100" value="50"></div></div>
+        <div class="slider-group">
+          <label>Brightness</label>
+          <div class="slider-row"><input type="range" id="m_br" min="0" max="100" value="50"><input type="number" id="m_br_in" min="0" max="100" value="50"></div>
+        </div>
+        <div class="slider-group">
+          <label>Piezo Power</label>
+          <div class="slider-row"><input type="range" id="m_int" min="0" max="100" value="50"><input type="number" id="m_int_in" min="0" max="100" value="50"></div>
+        </div>
       </div>
     </section>
 
+    <!-- SCHEDULING MODE PANEL -->
     <section id="schedule-panel" class="panel hidden">
       <div class="panel-header">
         <h3>📅 Schedule Manager</h3>
@@ -47,24 +57,24 @@
       <div id="schedule-container"></div>
     </section>
 
-    <section class="panel">
+    <!-- GLOBAL FAN CONTROL (Hidden in Schedule Mode) -->
+    <section id="global-fan-panel" class="panel">
       <h3>🌀 Fan Control</h3>
       <div class="slider-row"><input type="range" id="fan_sl" min="0" max="100" value="50"><input type="number" id="fan_in" min="0" max="100" value="50"><span class="unit">%</span></div>
     </section>
 
+    <!-- NETWORK CREDENTIALS -->
     <section class="panel">
       <h3>📶 Network Credentials</h3>
       <input type="text" id="net_ssid" placeholder="Wi-Fi SSID">
-      <div class="pass-group">
-        <input type="password" id="net_pass" placeholder="Password">
-        <button id="pass_toggle" type="button">👁️</button>
-      </div>
+      <div class="pass-group"><input type="password" id="net_pass" placeholder="Password"><button id="pass_toggle" type="button">👁️</button></div>
       <button id="net_save" class="btn primary">Save Credentials</button>
       <div id="net_status" class="status hidden"></div>
     </section>
 
     <footer>Uptime: <span id="uptime">Loading...</span></footer>
   </main>
+
   <script src="main.js"></script>
 </body>
 </html>
