@@ -38,12 +38,12 @@ add_custom_target(sample_server_cert
 option(INCLUDE_HTML_CONTENT "Include the HTML content" ON)
 
 target_include_directories(app PRIVATE inc)
-FILE(GLOB app_sources src/*.c src/*.cpp)
+FILE(GLOB app_sources src/*.cpp)
 target_sources(app PRIVATE ${app_sources})
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated/)
 
-target_sources_ifdef(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE app PRIVATE src/ws.c)
+# target_sources_ifdef(CONFIG_NET_SAMPLE_WEBSOCKET_SERVICE app PRIVATE src/ws.c)
 
 if(CONFIG_USB_DEVICE_STACK_NEXT)
   include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
@@ -64,6 +64,7 @@ zephyr_linker_section_ifdef(CONFIG_NET_SAMPLE_HTTP_SERVICE
 foreach(web_resource
   index.html
   main.js
+  style.css
 )
   generate_inc_file_for_target(app
     src/static_web_resources/${web_resource}

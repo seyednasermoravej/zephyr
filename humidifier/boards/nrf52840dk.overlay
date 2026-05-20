@@ -22,37 +22,17 @@
 			pwms = <&pwm0 3 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
 		};
 	};
-	// 	humidifier_buttons: buttons {
-	// 	compatible = "gpio-keys"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:61 */
-
-	// 	/* node '/buttons/button_0' defined in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:63 */
-	// 	button0: button_0 {
-	// 		gpios = < &gpio0 0xb 0x11 >;    /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:64 */
-	// 		label = "Push button switch 0"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:65 */
-	// 		zephyr,code = < 0xb >;          /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:66 */
-	// 	};
-
-	// 	/* node '/buttons/button_1' defined in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:69 */
-	// 	button1: button_1 {
-	// 		gpios = < &gpio0 0xc 0x11 >;    /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:70 */
-	// 		label = "Push button switch 1"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:71 */
-	// 		zephyr,code = < 0x2 >;          /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:72 */
-	// 	};
-
-	// 	/* node '/buttons/button_2' defined in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:75 */
-	// 	button2: button_2 {
-	// 		gpios = < &gpio0 0x18 0x11 >;   /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:76 */
-	// 		label = "Push button switch 2"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:77 */
-	// 		zephyr,code = < 0x3 >;          /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:78 */
-	// 	};
-
-	// 	/* node '/buttons/button_3' defined in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:81 */
-	// 	button3: button_3 {
-	// 		gpios = < &gpio0 0x19 0x11 >;   /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:82 */
-	// 		label = "Push button switch 3"; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:83 */
-	// 		zephyr,code = < 0x4 >;          /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:84 */
-	// 	};
-	// };
+	zephyr,user
+	{
+		io-channels = <&adc 0>;
+	};
+	piezo_selector
+	{
+		compatible = "power-switch";
+		gpios = <&gpio1 13 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>,
+			<&gpio1 14 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>,
+			<&gpio1 15 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+	};
 };
 
 &pwm0_default
@@ -82,3 +62,18 @@
 	zephyr,code = < INPUT_BTN_2 >; /* in zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts:72 */
 };
 
+
+&adc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+        channel@0 {
+                reg = <0>;
+                zephyr,gain = "ADC_GAIN_1_6";
+                zephyr,reference = "ADC_REF_INTERNAL";
+                zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+                zephyr,input-positive = <NRF_SAADC_AIN1>; /* P0.03 */
+                zephyr,resolution = <12>;
+        };
+
+};
