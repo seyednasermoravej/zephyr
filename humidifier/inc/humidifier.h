@@ -124,8 +124,17 @@ struct Credentials {
     char password[32];
 };
 
+enum Routines
+{
+	MANUAL = 0,
+	SCHEDULING,
+};
 struct Settings {
 
+	Routines activeRoutine = MANUAL;
+
+	/*struct Manual manual = { 0 };*/
+	/*struct Scheduling scheduling = { 0 };*/
     uint8_t fanSpeed;
 
     struct PiezosStatus piezos;
@@ -226,13 +235,7 @@ private:
 
     void stopSchedule(struct Schedule *schedule);
 
-    void setPiezoPwm(
-        uint8_t piezoNum,
-        uint8_t red,
-        uint8_t green,
-        uint8_t blue,
-        uint8_t intensity
-    );
+    void setPiezoPwm(uint8_t piezoNum);
 
     int nvsInit();
 
