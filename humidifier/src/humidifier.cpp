@@ -53,7 +53,9 @@ Humidifier::Humidifier()
 
     instance = this;
 
-    INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
+//     INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
+
+    setPiezoPwm(0);
 
     k_thread_create(
         &scheduleThread,
@@ -207,7 +209,7 @@ void Humidifier::setDefaultSettings()
         .running = false,
         .stopEpoch = 0,
     };
-
+    setPiezoPwm(0);
     writeSettings();
 }
 
@@ -303,12 +305,7 @@ void Humidifier::runSchedule(struct Schedule *s)
     settings.fanSpeed = s->fanLevel;
 
     setPiezoPwm(
-        s->activePiezo,
-        s->brightness,
-        s->brightness,
-        s->brightness,
-        s->intensity
-    );
+        s->activePiezo);
 
     led_set_brightness(
         pwmsDev,
@@ -338,49 +335,15 @@ void Humidifier::stopSchedule(struct Schedule *s)
     writeSettings();
 }
 
-void Humidifier::setPiezoPwm(
-    uint8_t piezoNum,
-    uint8_t red,
-    uint8_t green,
-    uint8_t blue,
-    uint8_t intensity)
+void Humidifier::setPiezoPwm(uint8_t piezoNum)
 {
-    int redCh;
-    int greenCh;
-    int blueCh;
+	gpio_pin_set_dt(&selectors[0], GPIO_OUTPUT_INACTIVE);
+	gpio_pin_set_dt(&selectors[1], GPIO_OUTPUT_INACTIVE);
+	gpio_pin_set_dt(&selectors[2], GPIO_OUTPUT_INACTIVE);
 
-    switch (piezoNum)
-    {
-        case 0:
-            redCh = RED0;
-            greenCh = GREEN0;
-            blueCh = BLUE0;
-            break;
+	gpio_pin_set_dt(&selectors[piezoNum], GPIO_OUTPUT_ACTIVE);
+	led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[piezoNum].intensity);
 
-        case 1:
-            redCh = RED1;
-            greenCh = GREEN1;
-            blueCh = BLUE1;
-            break;
-
-        case 2:
-            redCh = RED2;
-            greenCh = GREEN2;
-            blueCh = BLUE2;
-            break;
-
-        default:
-            LOG_ERR("Invalid piezo number");
-            return;
-    }
-
-    led_set_brightness(pwmsDev, PIEZO, intensity);
-
-    led_set_brightness(pwmsDev, redCh, red);
-
-    led_set_brightness(pwmsDev, greenCh, green);
-
-    led_set_brightness(pwmsDev, blueCh, blue);
 }
 
 void Humidifier::buttonsHandlerWrapper(struct input_event *val, void *userData)
@@ -499,13 +462,7 @@ void Humidifier::parsePiezosPost(char *buf, size_t len)
 
     settings.piezos.piezos[cmd.piezoNum].intensity = cmd.intensity;
 
-    setPiezoPwm(
-        cmd.piezoNum,
-        cmd.brightness,
-        cmd.brightness,
-        cmd.brightness,
-        cmd.intensity
-    );
+    setPiezoPwm(cmd.piezoNum);
 
     writeSettings();
 }
@@ -676,33 +633,34 @@ void Humidifier::getCredentials(char *ssid, char *psk)
 
 bool Humidifier::safetyCheck()
 {
-	bool lowPizos[NUM_OF_PIEZOS];
+	bool lowPiezos[NUM_OF_PIEZOS];
 	bool fault = false;
 
 	for (uint8_t i = 0; i < NUM_OF_PIEZOS; i++)
 	{
-		lowPizos[i] = checkLowPiezo(i);
+		lowPiezos[i] = checkLowPiezo(i);
 	}
 
-	if(lowPizos[0])
+	if(lowPiezos[0])
 	{
 		led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[0].brightness);
-		fault = true;
 	}
 
-	if(lowPizos[1])
+	if(lowPiezos[1])
 	{
-		led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[1].brightness);
-		fault = true;
+		led_set_brightness(pwmsDev, RED1, settings.piezos.piezos[1].brightness);
 	}
 
-	if(lowPizos[2])
+	if(lowPiezos[2])
 	{
-		led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[2].brightness);
-		fault = true;
+		led_set_brightness(pwmsDev, RED2, settings.piezos.piezos[2].brightness);
 	}
 
-	k_sleep(K_SECONDS(60));
+	if(lowPiezos[0] || lowPiezos[1] || lowPiezos[2])
+	{
+		fault = true;
+		k_sleep(K_SECONDS(60));
+	}
 	return fault;
 }
 
@@ -710,6 +668,9 @@ bool Humidifier::checkLowPiezo(uint8_t i)
 {
 	int ret = gpio_pin_set_dt(&selectors[i], GPIO_OUTPUT_ACTIVE);
 	uint16_t value = readAdc(0);
+	//
+	value = 2000;
+	//
 
 	if(ret)
 	{
@@ -788,8 +749,8 @@ int Humidifier::hardwareInit()
 	for (int i = 0; i < NUM_OF_PIEZOS; i++) {
 
 		if (!gpio_is_ready_dt(&selectors[i])) {
-		LOG_ERR("GPIO selector %d not ready", i);
-		return -1;
+			LOG_ERR("GPIO selector %d not ready", i);
+			return -1;
 		}
 
 		ret = gpio_pin_configure_dt(
@@ -798,8 +759,8 @@ int Humidifier::hardwareInit()
 		);
 
 		if (ret < 0) {
-		LOG_ERR("GPIO selector %d configure failed (%d)", i, ret);
-		return ret;
+			LOG_ERR("GPIO selector %d configure failed (%d)", i, ret);
+			return ret;
 		}
 	}
 }
