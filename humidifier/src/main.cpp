@@ -624,34 +624,34 @@ int main(void)
 	LOG_INF("Besme Allah");
 
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
-	char ssid[] = "Naser-Wi-Fi";
-	// char ssid[32] = { 0 };
-	// char psk[32] = { 0 };
-	char psk[] = "1020151515";
-	// humidifier->getCredentials(ssid, psk);
-	struct net_if *iface = net_if_get_default();
+	// char ssid[] = "Naser-Wi-Fi";
+	// // char ssid[32] = { 0 };
+	// // char psk[32] = { 0 };
+	// char psk[] = "1020151515";
+	// // humidifier->getCredentials(ssid, psk);
+	// struct net_if *iface = net_if_get_default();
 
-	struct wifi_connect_req_params connect_params = {
-		.ssid = (uint8_t *)ssid,
-		.ssid_length = strlen(ssid),
-		.psk = (uint8_t *)psk,
-		.psk_length = strlen(psk),
-		// .ssid = "PAIDAR",
-		// .ssid_length = strlen("PAIDAR"),
-		// .psk = "Atal-Matal 347",
-		// .psk_length = strlen("Atal-Matal 347"),
-		// .ssid = "Naser",
-		// .ssid_length = strlen("Naser"),
-		// .psk = "nasimore",
-		// .psk_length = strlen("nasimore"),
-		.security = WIFI_SECURITY_TYPE_PSK,
-	};
-	net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
+	// struct wifi_connect_req_params connect_params = {
+	// 	.ssid = (uint8_t *)ssid,
+	// 	.ssid_length = strlen(ssid),
+	// 	.psk = (uint8_t *)psk,
+	// 	.psk_length = strlen(psk),
+	// 	// .ssid = "PAIDAR",
+	// 	// .ssid_length = strlen("PAIDAR"),
+	// 	// .psk = "Atal-Matal 347",
+	// 	// .psk_length = strlen("Atal-Matal 347"),
+	// 	// .ssid = "Naser",
+	// 	// .ssid_length = strlen("Naser"),
+	// 	// .psk = "nasimore",
+	// 	// .psk_length = strlen("nasimore"),
+	// 	.security = WIFI_SECURITY_TYPE_PSK,
+	// };
+	// net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
 #else
 	init_usb();
 #endif
 	// k_sleep(K_SECONDS(5));
 	humidifier = new Humidifier();
-	http_server_start();
+	// http_server_start();
 	return 0;
 }

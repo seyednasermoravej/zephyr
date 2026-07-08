@@ -40,11 +40,12 @@ Humidifier::Humidifier()
 
     readInfosFromMemory();
 
-    syncTimeSntp();
+//     syncTimeSntp();
 
     hardwareInit();
 
-    led_set_brightness(pwmsDev, FAN, settings.fanSpeed);
+    setPiezoPwm(0);
+//     led_set_brightness(pwmsDev, FAN, settings.fanSpeed);
 
     if (safetyCheck())
     {
@@ -83,7 +84,7 @@ void Humidifier::setDefaultSettings()
     settings.piezos.piezosNum = NUM_OF_PIEZOS;
 
     settings.piezos.piezos[0].brightness = 20;
-    settings.piezos.piezos[0].intensity = 30;
+    settings.piezos.piezos[0].intensity = 50;
 
     settings.piezos.piezos[1].brightness = 40;
     settings.piezos.piezos[1].intensity = 50;
@@ -209,7 +210,6 @@ void Humidifier::setDefaultSettings()
         .running = false,
         .stopEpoch = 0,
     };
-    setPiezoPwm(0);
     writeSettings();
 }
 
@@ -342,7 +342,9 @@ void Humidifier::setPiezoPwm(uint8_t piezoNum)
 	gpio_pin_set_dt(&selectors[2], GPIO_OUTPUT_INACTIVE);
 
 	gpio_pin_set_dt(&selectors[piezoNum], GPIO_OUTPUT_ACTIVE);
-	led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[piezoNum].intensity);
+	LOG_INF("Activating the piezo");
+	// led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[piezoNum].intensity);
+	led_set_brightness(pwmsDev, PIEZO, 10);
 
 }
 
