@@ -344,7 +344,7 @@ void Humidifier::setPiezoPwm(uint8_t piezoNum)
 	gpio_pin_set_dt(&selectors[piezoNum], GPIO_OUTPUT_ACTIVE);
 	LOG_INF("Activating the piezo");
 	// led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[piezoNum].intensity);
-	led_set_brightness(pwmsDev, PIEZO, 10);
+	led_set_brightness(pwmsDev, PIEZO, 50);
 
 }
 
