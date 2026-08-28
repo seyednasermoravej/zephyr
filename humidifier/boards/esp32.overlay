@@ -18,7 +18,7 @@
 
 		piezo_piezo: piezo_piezo
 		{
-			pwms = <&ledc0 1 PWM_KHZ(108) PWM_POLARITY_NORMAL>;
+			pwms = <&ledc0 1 PWM_KHZ(110) PWM_POLARITY_NORMAL>;
 		};
 
 		piezo0led_red{
