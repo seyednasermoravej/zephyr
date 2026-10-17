@@ -6,6 +6,9 @@
 #include <zephyr/dt-bindings/pwm/pwm.h>
 
 /{
+	aliases {
+		piezo-pwm = &piezo_piezo;
+	};
 
 	all_pwms
 	{
@@ -18,7 +21,8 @@
 
 		piezo_piezo: piezo_piezo
 		{
-			pwms = <&ledc0 1 PWM_KHZ(110) PWM_POLARITY_NORMAL>;
+			/* Runtime control overrides this nominal 1.7 MHz period. */
+			pwms = <&ledc0 1 PWM_NSEC(588) PWM_POLARITY_NORMAL>;
 		};
 
 		piezo0led_red{
@@ -55,9 +59,9 @@
 	piezo_selector
 	{
 		compatible = "power-switch";
-		gpios = <&gpio0 22 GPIO_ACTIVE_LOW>,
-			<&gpio0 23 GPIO_ACTIVE_LOW>,
-			<&gpio0 21 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>,
+			<&gpio0 23 GPIO_ACTIVE_HIGH>,
+			<&gpio0 21 GPIO_ACTIVE_HIGH>;
 	};
 
 	buttons
@@ -65,20 +69,20 @@
 		compatible = "gpio-keys";
 		button0: button_0
 		{
-			//gpi (input only) pin 36
-			gpios = <&gpio1 5 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			/* GPIO36: input-only, requires an external pull-up. */
+			gpios = <&gpio1 4 GPIO_ACTIVE_LOW>;
 			zephyr,code = <INPUT_BTN_0>;
 		};
 		button1: button_1
 		{
-			//gpi (input only) pin 39
-			gpios = <&gpio1 8 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			/* GPIO39: gpio1 starts at GPIO32, so its index is 7. */
+			gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
 			zephyr,code = <INPUT_BTN_1>;
 		};
 		button2: button_2
 		{
-			//gpi (input only) pin 34
-			gpios = <&gpio1 3 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			/* GPIO34: input-only, requires an external pull-up. */
+			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
 			zephyr,code = <INPUT_BTN_2>;
 		};
 	};
@@ -141,6 +145,7 @@
         };
         channel1@1 {
                 reg = <0x1>;
+		/* A dedicated timer lets the piezo frequency change independently. */
                 timer = <1>;
         };
         channel2@2 {

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/net/http/server.h>
@@ -22,7 +24,10 @@
 
 #include <time.h>
 
-#ifdef CONFIG_BOARD_ESP32_DEVKITC
+#if defined(CONFIG_WIFI)
+#include <zephyr/net/dhcpv4.h>
+#include <zephyr/net/net_event.h>
+#include <zephyr/net/net_if.h>
 #include <zephyr/net/wifi.h>
 #include <zephyr/net/wifi_mgmt.h>
 #endif
@@ -289,55 +294,86 @@ static int piezosHandler(struct http_client_ctx *client,
 		      struct http_response_ctx *responseCtx,
 		      void *userData)
 {
-	static char postBuf[256] = { 0 };
+	/* Zephyr holds a dynamic resource for one client until COMPLETE/ABORTED. */
+	static char postBuf[256];
+	static char responseBuf[512];
 	static size_t cursor;
+	static bool tooLarge;
+	static bool invalidData;
+	static bool responded;
 
-	if (client->method == HTTP_GET) {
-		if (status == HTTP_SERVER_REQUEST_DATA_FINAL || status == HTTP_SERVER_TRANSACTION_COMPLETE) {
-			int len = humidifier->piezosStatus(postBuf, sizeof(postBuf));
-			if (len == 0) {
-				responseCtx->body = (uint8_t *)postBuf;
-				responseCtx->body_len = strlen(postBuf);
-				responseCtx->final_chunk = true;
-			}
-			LOG_DBG("json char is: %s", postBuf);
-			LOG_DBG("json buf is: %s", responseCtx->body);
-		}
-		return 0;
-	}
-
+	/* Terminal callbacks are cleanup only, including for GET requests. */
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
 		cursor = 0;
+		tooLarge = false;
+		invalidData = false;
+		responded = false;
+		postBuf[0] = '\0';
 		return 0;
 	}
 
-	if (requestCtx->data_len + cursor > sizeof(postBuf)) {
-		cursor = 0;
-		return -ENOMEM;
+	if (responded) {
+		return 0;
 	}
 
-	memcpy(postBuf + cursor,
-	       requestCtx->data,
-	       requestCtx->data_len);
-
-	cursor += requestCtx->data_len;
-
-	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		humidifier->parsePiezosPost(postBuf, cursor);
-		cursor = 0;
-		humidifier->piezosStatus(postBuf, sizeof(postBuf));
-		responseCtx->body = (uint8_t *)postBuf;
-		responseCtx->body_len = strlen(postBuf);
-		responseCtx->final_chunk = true;
+	if (client->method == HTTP_POST && !tooLarge && !invalidData) {
+		/* Reserve a byte for the terminator; keep the failure until FINAL. */
+		if (requestCtx->data_len > sizeof(postBuf) - 1 - cursor) {
+			tooLarge = true;
+		} else if (requestCtx->data_len > 0) {
+			if (requestCtx->data == NULL ||
+			    memchr(requestCtx->data, '\0', requestCtx->data_len) != NULL) {
+				invalidData = true;
+			} else {
+				memcpy(postBuf + cursor, requestCtx->data, requestCtx->data_len);
+				cursor += requestCtx->data_len;
+			}
+		}
 	}
 
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL) {
+		return 0;
+	}
+
+	int ret = 0;
+	const char *error = NULL;
+	responseCtx->status = HTTP_200_OK;
+	if (tooLarge) {
+		responseCtx->status = HTTP_413_PAYLOAD_TOO_LARGE;
+		error = "{\"error\":\"Request body is too large\"}";
+	} else if (invalidData) {
+		responseCtx->status = HTTP_400_BAD_REQUEST;
+		error = "{\"error\":\"Invalid JSON body\"}";
+	} else {
+		if (client->method == HTTP_POST) {
+			postBuf[cursor] = '\0';
+			ret = humidifier->parsePiezosPost(postBuf, cursor);
+		}
+		if (ret == -EINVAL || ret == -ERANGE) {
+			responseCtx->status = HTTP_400_BAD_REQUEST;
+			error = "{\"error\":\"Use piezoNum -1 (off) or 0-2, brightness and intensity 0-100, and frequencyHz 1600000-1800000\"}";
+		} else if (ret < 0) {
+			LOG_ERR("Unable to update piezo: %d", ret);
+			responseCtx->status = HTTP_500_INTERNAL_SERVER_ERROR;
+			error = "{\"error\":\"Unable to apply or save piezo settings\"}";
+		} else if (humidifier->piezosStatus(responseBuf, sizeof(responseBuf)) < 0) {
+			responseCtx->status = HTTP_500_INTERNAL_SERVER_ERROR;
+			error = "{\"error\":\"Unable to read piezo settings\"}";
+		}
+	}
+
+	responseCtx->body = reinterpret_cast<const uint8_t *>(error ? error : responseBuf);
+	responseCtx->body_len = strlen(reinterpret_cast<const char *>(responseCtx->body));
+	responseCtx->final_chunk = true;
+	responded = true;
 	return 0;
 }
 static struct http_resource_detail_dynamic piezosResourceDetail = {
 	.common = {
 			.bitmask_of_supported_http_methods = BIT(HTTP_POST) | BIT(HTTP_GET),
 			.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+			.content_type = "application/json",
 		},
 	.cb = piezosHandler,
 	.user_data = NULL,
@@ -619,39 +655,94 @@ static int init_usb(void)
 	return 0;
 }
 
+#if defined(CONFIG_WIFI)
+static struct net_mgmt_event_callback wifiCallback;
+static struct net_mgmt_event_callback addressCallback;
+
+static void wifiEventHandler(struct net_mgmt_event_callback *callback, uint64_t event,
+			     struct net_if *iface)
+{
+	if (event == NET_EVENT_WIFI_CONNECT_RESULT) {
+		const auto *result = static_cast<const struct wifi_status *>(callback->info);
+		if (result != NULL && result->status != 0) {
+			LOG_ERR("Wi-Fi connection failed: %d", result->status);
+		} else {
+			LOG_INF("Wi-Fi connected; waiting for DHCP");
+		}
+	} else if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
+		LOG_WRN("Wi-Fi disconnected");
+	} else if (event == NET_EVENT_IPV4_DHCP_BOUND) {
+		char address[NET_IPV4_ADDR_LEN];
+		net_addr_ntop(NET_AF_INET, &iface->config.dhcpv4.requested_ip,
+			      address, sizeof(address));
+		LOG_INF("Humidifier IPv4 address: %s", address);
+	}
+}
+
+static int connectSavedWifi(void)
+{
+	/* Keep the credentials alive throughout the asynchronous connection request. */
+	static char ssid[sizeof(Credentials::ssid)] = {};
+	static char password[sizeof(Credentials::password)] = {};
+	static struct wifi_connect_req_params params = {};
+	struct net_if *iface = net_if_get_wifi_sta();
+	if (iface == NULL) {
+		return -ENODEV;
+	}
+
+	humidifier->getCredentials(ssid, password);
+	if (ssid[0] == '\0') {
+		LOG_ERR("No saved Wi-Fi SSID");
+		return -EINVAL;
+	}
+
+	net_mgmt_init_event_callback(&wifiCallback, wifiEventHandler,
+		NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
+	net_mgmt_add_event_callback(&wifiCallback);
+	net_mgmt_init_event_callback(&addressCallback, wifiEventHandler, NET_EVENT_IPV4_DHCP_BOUND);
+	net_mgmt_add_event_callback(&addressCallback);
+
+	params.ssid = reinterpret_cast<const uint8_t *>(ssid);
+	params.ssid_length = strlen(ssid);
+	params.psk = reinterpret_cast<const uint8_t *>(password);
+	params.psk_length = strlen(password);
+	params.security = params.psk_length ? WIFI_SECURITY_TYPE_PSK : WIFI_SECURITY_TYPE_NONE;
+	params.channel = WIFI_CHANNEL_ANY;
+	params.band = WIFI_FREQ_BAND_2_4_GHZ;
+	params.mfp = WIFI_MFP_OPTIONAL;
+	params.timeout = 30;
+	net_dhcpv4_start(iface);
+	LOG_INF("Connecting using saved Wi-Fi credentials");
+	return net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &params, sizeof(params));
+}
+#endif
+
 int main(void)
 {
-	LOG_INF("Besme Allah");
+	LOG_INF("Starting humidifier");
+	static Humidifier controller;
+	humidifier = &controller;
 
-#ifdef CONFIG_BOARD_ESP32_DEVKITC
-	// char ssid[] = "Naser-Wi-Fi";
-	// // char ssid[32] = { 0 };
-	// // char psk[32] = { 0 };
-	// char psk[] = "1020151515";
-	// // humidifier->getCredentials(ssid, psk);
-	// struct net_if *iface = net_if_get_default();
+	int ret = init_usb();
+	if (ret < 0) {
+		LOG_ERR("USB network initialization failed: %d", ret);
+		return ret;
+	}
 
-	// struct wifi_connect_req_params connect_params = {
-	// 	.ssid = (uint8_t *)ssid,
-	// 	.ssid_length = strlen(ssid),
-	// 	.psk = (uint8_t *)psk,
-	// 	.psk_length = strlen(psk),
-	// 	// .ssid = "PAIDAR",
-	// 	// .ssid_length = strlen("PAIDAR"),
-	// 	// .psk = "Atal-Matal 347",
-	// 	// .psk_length = strlen("Atal-Matal 347"),
-	// 	// .ssid = "Naser",
-	// 	// .ssid_length = strlen("Naser"),
-	// 	// .psk = "nasimore",
-	// 	// .psk_length = strlen("nasimore"),
-	// 	.security = WIFI_SECURITY_TYPE_PSK,
-	// };
-	// net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connect_params, sizeof(connect_params));
-#else
-	init_usb();
+	setup_tls();
+	ret = http_server_start();
+	if (ret < 0) {
+		LOG_ERR("HTTP server startup failed: %d", ret);
+		return ret;
+	}
+	LOG_INF("HTTP server started");
+
+#if defined(CONFIG_WIFI)
+	ret = connectSavedWifi();
+	if (ret < 0) {
+		LOG_ERR("Unable to start Wi-Fi connection: %d", ret);
+		return ret;
+	}
 #endif
-	// k_sleep(K_SECONDS(5));
-	humidifier = new Humidifier();
-	// http_server_start();
 	return 0;
 }

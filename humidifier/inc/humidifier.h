@@ -1,6 +1,8 @@
 #ifndef __HUMIDIFIER__H__
 #define __HUMIDIFIER__H__
 
+#include "piezo_command.h"
+
 #include <stdio.h>
 #include <inttypes.h>
 #include <time.h>
@@ -43,9 +45,9 @@
 #define NUM_OF_PIEZOS 3
 #define MAX_SCHEDULES 10
 #define NVS_SETTINGS_ID 0
+#define NVS_SETTINGS_V2_ID 1
 
 #define SCHEDULER_STACK_SIZE	2048
-#define LOW_LEVEL_THRESHOLD	1000
 struct Schedule {
 
     uint32_t id;
@@ -93,21 +95,18 @@ enum pwmIndices {
     BLUE2,
 };
 
-struct PiezoStatusUpdate {
-    uint8_t piezoNum;
-    uint8_t brightness;
-    uint8_t intensity;
-};
-
 struct PiezoStatus {
     uint8_t brightness;
     uint8_t intensity;
+    uint32_t frequencyHz;
 };
 
 struct PiezosStatus {
     int8_t active;
     struct PiezoStatus piezos[NUM_OF_PIEZOS];
     size_t piezosNum;
+    uint32_t actualFrequencyHz;
+    uint32_t actualDutyBasisPoints;
 };
 
 struct FanStatus {
@@ -156,12 +155,7 @@ static const struct json_obj_descr credentialsDescr[] = {
 static const struct json_obj_descr piezoDescr[] = {
     JSON_OBJ_DESCR_PRIM(struct PiezoStatus, brightness, JSON_TOK_UINT),
     JSON_OBJ_DESCR_PRIM(struct PiezoStatus, intensity, JSON_TOK_UINT),
-};
-
-static const struct json_obj_descr piezoDescrUpdate[] = {
-    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, piezoNum, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, brightness, JSON_TOK_UINT),
-    JSON_OBJ_DESCR_PRIM(struct PiezoStatusUpdate, intensity, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezoStatus, frequencyHz, JSON_TOK_UINT),
 };
 
 static const struct json_obj_descr piezosDescr[] = {
@@ -174,6 +168,8 @@ static const struct json_obj_descr piezosDescr[] = {
         piezoDescr,
         ARRAY_SIZE(piezoDescr)
     ),
+    JSON_OBJ_DESCR_PRIM(struct PiezosStatus, actualFrequencyHz, JSON_TOK_UINT),
+    JSON_OBJ_DESCR_PRIM(struct PiezosStatus, actualDutyBasisPoints, JSON_TOK_UINT),
 };
 
 static const struct json_obj_descr fanDescr[] = {
@@ -191,7 +187,7 @@ public:
 
     Humidifier();
 
-    void parsePiezosPost(char *buf, size_t len);
+    int parsePiezosPost(char *buf, size_t len);
 
     void parseFanPost(char *buf, size_t len);
 
@@ -219,6 +215,10 @@ private:
 
     struct nvs_fs *fs;
 
+    bool storageReady;
+
+    bool hardwareReady;
+
     uint32_t currentTime;
 
     bool timeSynced;
@@ -235,7 +235,9 @@ private:
 
     void stopSchedule(struct Schedule *schedule);
 
-    void setPiezoPwm(uint8_t piezoNum);
+    int setPiezoPwm(int8_t piezoNum);
+
+    int disablePiezos();
 
     int nvsInit();
 
@@ -246,12 +248,6 @@ private:
     void setDefaultSettings();
 
     void setCredentials(char *ssid, char *password);
-
-	bool safetyCheck();
-
-	bool checkLowPiezo(uint8_t i);
-
-	uint16_t readAdc(uint8_t index);
 
 	int hardwareInit();
 };

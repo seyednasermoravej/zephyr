@@ -25,13 +25,16 @@ header h1 { font-size: 2rem; margin-bottom: 8px; }
 .radio-card { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 20px; background: #f1f5f9; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; }
 .radio-card input { display: none; }
 .radio-card:has(input:checked) { background: #eff6ff; color: var(--primary); font-weight: 600; border-color: var(--primary); }
+.radio-card:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
 
 .controls-card { border-top: 1px solid #eee; padding-top: 12px; margin-top: 8px; }
 .slider-group { margin-bottom: 12px; }
 .slider-group label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: var(--muted); }
+.control-help { margin-top: 8px; color: var(--muted); font-size: 0.85rem; }
 .slider-row { display: flex; align-items: center; gap: 10px; }
 input[type="range"] { flex: 1; accent-color: var(--primary); height: 6px; }
 input[type="number"] { width: 60px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; }
+#m_freq_in { width: 88px; }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .schedule-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px; position: relative; transition: border-color 0.3s, background 0.3s; }
@@ -61,6 +64,7 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 .status.success { background: #dcfce7; color: #166534; }
 .status.error { background: #fee2e2; color: #991b1b; }
 .status.hidden { display: none; }
+.btn.hidden { display: none; }
 
 .pass-group { display: flex; gap: 6px; }
 .pass-group input { flex: 1; }
@@ -69,5 +73,5 @@ footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top
 
 @media (max-width: 600px) {
   .slider-row, .sched-row { flex-direction: column; align-items: stretch; }
-  input[type="number"] { width: 100%; }
+  input[type="number"], #m_freq_in { width: 100%; }
 }

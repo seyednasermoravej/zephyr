@@ -1,8 +1,58 @@
 #include "humidifier.h"
+#include "piezo_pwm.h"
+#include <errno.h>
 
 
 K_THREAD_STACK_DEFINE(schedulerStackArea, SCHEDULER_STACK_SIZE);
-struct k_thread schedulerThread;
+// HTTP handlers and the scheduler share settings and the selector GPIOs.
+K_MUTEX_DEFINE(settingsMutex);
+
+class SettingsLock {
+public:
+    SettingsLock() { k_mutex_lock(&settingsMutex, K_FOREVER); }
+    ~SettingsLock() { k_mutex_unlock(&settingsMutex); }
+};
+
+// Keep the original layout solely for migrating ID 0 without losing credentials.
+struct LegacyPiezoStatus { uint8_t brightness; uint8_t intensity; };
+struct LegacyPiezosStatus {
+    int8_t active;
+    LegacyPiezoStatus piezos[NUM_OF_PIEZOS];
+    size_t piezosNum;
+};
+struct LegacySettings {
+    Routines activeRoutine;
+    uint8_t fanSpeed;
+    LegacyPiezosStatus piezos;
+    Credentials credentials;
+    uint32_t nextScheduleId;
+    uint8_t schedulesNum;
+    Schedule schedules[MAX_SCHEDULES];
+};
+struct StoredSettings {
+    uint32_t magic;
+    uint32_t version;
+    Settings value;
+};
+static constexpr uint32_t SETTINGS_MAGIC = 0x48554d32;
+
+static bool validSettings(const Settings &value)
+{
+    if (value.fanSpeed > 100 || value.piezos.piezosNum != NUM_OF_PIEZOS ||
+        value.schedulesNum > MAX_SCHEDULES ||
+        !memchr(value.credentials.ssid, '\0', sizeof(value.credentials.ssid)) ||
+        !memchr(value.credentials.password, '\0', sizeof(value.credentials.password))) {
+        return false;
+    }
+    for (const auto &piezo : value.piezos.piezos) {
+        if (piezo.brightness > 100 || piezo.intensity > 100 ||
+            piezo.frequencyHz < PIEZO_FREQUENCY_MIN_HZ ||
+            piezo.frequencyHz > PIEZO_FREQUENCY_MAX_HZ) {
+            return false;
+        }
+    }
+    return true;
+}
 
 
 LOG_MODULE_REGISTER(humidifier, LOG_LEVEL_INF);
@@ -12,6 +62,9 @@ LOG_MODULE_REGISTER(humidifier, LOG_LEVEL_INF);
 static Humidifier *instance = nullptr;
 
 static const struct device *pwmsDev = DEVICE_DT_GET(LED_PWM_NODE_ID);
+#if DT_NODE_HAS_STATUS(DT_ALIAS(piezo_pwm), okay)
+static const struct pwm_dt_spec piezoPwm = PWM_DT_SPEC_GET(DT_ALIAS(piezo_pwm));
+#endif
 
 static const struct device *const buttons = DEVICE_DT_GET(DT_PATH(buttons));
 
@@ -22,195 +75,58 @@ static const struct gpio_dt_spec selectors[] = {
 };
 
 
-#define DT_SPEC_AND_COMMA(node_id, prop, idx) \
-	ADC_DT_SPEC_GET_BY_IDX(node_id, idx),
-
-static const struct adc_dt_spec adc_channels[] = {
-	DT_FOREACH_PROP_ELEM(DT_PATH(zephyr_user), io_channels,
-			     DT_SPEC_AND_COMMA)
-};
-
 Humidifier::Humidifier()
+    : fs(nullptr), storageReady(false), hardwareReady(false),
+      currentTime(0), timeSynced(false)
 {
     LOG_INF("Humidifier constructor");
-
-    int ret = 0;
-    currentTime = 0;
-    timeSynced = false;
-
     readInfosFromMemory();
 
-//     syncTimeSntp();
+    // A reboot never energizes a saved selection automatically.
+    settings.activeRoutine = MANUAL;
+    settings.piezos.active = -1;
+    settings.piezos.actualFrequencyHz = 0;
+    settings.piezos.actualDutyBasisPoints = 0;
+    for (auto &schedule : settings.schedules) {
+        schedule.running = false;
+        schedule.stopEpoch = 0;
+    }
 
-    hardwareInit();
-
-    setPiezoPwm(0);
-//     led_set_brightness(pwmsDev, FAN, settings.fanSpeed);
-
-    if (safetyCheck())
-    {
-	return;
+    int ret = hardwareInit();
+    if (ret == 0) {
+        hardwareReady = true;
+        ret = disablePiezos();
+        if (ret == 0) {
+            led_set_brightness(pwmsDev, FAN, settings.fanSpeed);
+        } else {
+            hardwareReady = false;
+        }
+    }
+    if (ret < 0) {
+        LOG_ERR("Hardware initialization failed (%d)", ret);
     }
 
     instance = this;
-
-//     INPUT_CALLBACK_DEFINE(buttons, buttonsHandlerWrapper, (void *)this);
-
-    setPiezoPwm(0);
-
-    k_thread_create(
-        &scheduleThread,
-        schedulerStackArea,
-        K_THREAD_STACK_SIZEOF(schedulerStackArea),
-        schedulerThreadWrapper,
-        this,
-        NULL,
-        NULL,
-        5,
-        0,
-        K_NO_WAIT
-    );
-
-    LOG_INF("Scheduler thread started");
+    k_thread_create(&scheduleThread, schedulerStackArea,
+                    K_THREAD_STACK_SIZEOF(schedulerStackArea),
+                    schedulerThreadWrapper, this, NULL, NULL, 5, 0, K_NO_WAIT);
 }
 
 void Humidifier::setDefaultSettings()
 {
-    memset(&settings, 0, sizeof(settings));
-
+    settings = Settings{};
     settings.fanSpeed = 30;
-
     settings.piezos.active = -1;
     settings.piezos.piezosNum = NUM_OF_PIEZOS;
-
-    settings.piezos.piezos[0].brightness = 20;
-    settings.piezos.piezos[0].intensity = 50;
-
-    settings.piezos.piezos[1].brightness = 40;
-    settings.piezos.piezos[1].intensity = 50;
-
-    settings.piezos.piezos[2].brightness = 60;
-    settings.piezos.piezos[2].intensity = 70;
-
+    for (int i = 0; i < NUM_OF_PIEZOS; ++i) {
+        settings.piezos.piezos[i].brightness = 20 * (i + 1);
+        settings.piezos.piezos[i].intensity = PIEZO_DUTY_DEFAULT_PERCENT;
+        settings.piezos.piezos[i].frequencyHz = PIEZO_FREQUENCY_DEFAULT_HZ;
+    }
     strcpy(settings.credentials.ssid, "Humidifier");
     strcpy(settings.credentials.password, "12345678");
-
     settings.nextScheduleId = 1;
-
-    settings.schedulesNum = 1;
-
-    // Example 1
-    settings.schedules[0] = {
-        .id = 1,
-        .enabled = true,
-        .days = 0x7F,
-        .hour = 0,
-        .minute = 0,
-        .durationMinutes = 600,
-        .oneTime = false,
-        .activePiezo = 1,
-        .intensity = 60,
-        .fanLevel = 100,
-        .brightness = 5,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-
-    // Example 2
-    settings.schedules[1] = {
-        .id = 2,
-        .enabled = true,
-        .days = (1 << 3),
-        .hour = 14,
-        .minute = 30,
-        .durationMinutes = 10,
-        .oneTime = true,
-        .activePiezo = 0,
-        .intensity = 40,
-        .fanLevel = 30,
-        .brightness = 20,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-
-    // Example 3
-    settings.schedules[2] = {
-        .id = 3,
-        .enabled = true,
-        .days = (1 << 1) |
-                (1 << 2) |
-                (1 << 3) |
-                (1 << 4) |
-                (1 << 5),
-        .hour = 9,
-        .minute = 15,
-        .durationMinutes = 15,
-        .oneTime = false,
-        .activePiezo = 2,
-        .intensity = 80,
-        .fanLevel = 70,
-        .brightness = 80,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-
-    // Example 4
-    settings.schedules[3] = {
-        .id = 4,
-        .enabled = true,
-        .days = (1 << 0) | (1 << 6),
-        .hour = 22,
-        .minute = 45,
-        .durationMinutes = 5,
-        .oneTime = false,
-        .activePiezo = 0,
-        .intensity = 20,
-        .fanLevel = 10,
-        .brightness = 10,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-
-    // Example 5
-    settings.schedules[4] = {
-        .id = 5,
-        .enabled = true,
-        .days = 0x7F,
-        .hour = 23,
-        .minute = 59,
-        .durationMinutes = 2,
-        .oneTime = false,
-        .activePiezo = 1,
-        .intensity = 100,
-        .fanLevel = 100,
-        .brightness = 100,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-
-    // Example 6
-    settings.schedules[5] = {
-        .id = 6,
-        .enabled = false,
-        .days = 0x7F,
-        .hour = 12,
-        .minute = 0,
-        .durationMinutes = 30,
-        .oneTime = false,
-        .activePiezo = 2,
-        .intensity = 90,
-        .fanLevel = 90,
-        .brightness = 90,
-        .lastRunEpochMinute = 0,
-        .running = false,
-        .stopEpoch = 0,
-    };
-    writeSettings();
+    settings.schedulesNum = 0;
 }
 
 void Humidifier::schedulerThreadWrapper(void *arg1, void *arg2, void *arg3)
@@ -235,6 +151,10 @@ void Humidifier::scheduleLoop()
 
 void Humidifier::checkSchedules()
 {
+    SettingsLock lock;
+    if (settings.activeRoutine != SCHEDULING || !hardwareReady) {
+        return;
+    }
 #ifdef CONFIG_BOARD_ESP32_DEVKITC
     time_t now = time(NULL);
 #else
@@ -300,12 +220,18 @@ void Humidifier::runSchedule(struct Schedule *s)
         s->intensity
     );
 
-    settings.piezos.active = s->activePiezo;
-
+    if (s->activePiezo >= NUM_OF_PIEZOS || s->intensity > 100 ||
+        s->brightness > 100 || s->fanLevel > 100) {
+        return;
+    }
+    settings.piezos.piezos[s->activePiezo].intensity = s->intensity;
+    settings.piezos.piezos[s->activePiezo].brightness = s->brightness;
+    int ret = setPiezoPwm(s->activePiezo);
+    if (ret < 0) {
+        LOG_ERR("Schedule PWM failed (%d)", ret);
+        return;
+    }
     settings.fanSpeed = s->fanLevel;
-
-    setPiezoPwm(
-        s->activePiezo);
 
     led_set_brightness(
         pwmsDev,
@@ -326,7 +252,8 @@ void Humidifier::stopSchedule(struct Schedule *s)
 
     led_set_brightness(pwmsDev, FAN, 0);
 
-    led_set_brightness(pwmsDev, PIEZO, 0);
+    setPiezoPwm(-1);
+    settings.fanSpeed = 0;
 
     s->running = false;
 
@@ -335,17 +262,69 @@ void Humidifier::stopSchedule(struct Schedule *s)
     writeSettings();
 }
 
-void Humidifier::setPiezoPwm(uint8_t piezoNum)
+int Humidifier::disablePiezos()
 {
-	gpio_pin_set_dt(&selectors[0], GPIO_OUTPUT_INACTIVE);
-	gpio_pin_set_dt(&selectors[1], GPIO_OUTPUT_INACTIVE);
-	gpio_pin_set_dt(&selectors[2], GPIO_OUTPUT_INACTIVE);
+    // Break before make: disconnect every piezo before changing the shared PWM.
+    int result = 0;
+    for (const auto &selector : selectors) {
+        int ret = gpio_pin_set_dt(&selector, 0);
+        if (ret < 0 && result == 0) {
+            result = ret;
+        }
+    }
+#if DT_NODE_HAS_STATUS(DT_ALIAS(piezo_pwm), okay)
+    int ret = pwm_set_pulse_dt(&piezoPwm, 0);
+    if (ret < 0 && result == 0) {
+        result = ret;
+    }
+#else
+    result = -ENOTSUP;
+#endif
+    settings.piezos.active = -1;
+    settings.piezos.actualFrequencyHz = 0;
+    settings.piezos.actualDutyBasisPoints = 0;
+    return result;
+}
 
-	gpio_pin_set_dt(&selectors[piezoNum], GPIO_OUTPUT_ACTIVE);
-	LOG_INF("Activating the piezo");
-	// led_set_brightness(pwmsDev, PIEZO, settings.piezos.piezos[piezoNum].intensity);
-	led_set_brightness(pwmsDev, PIEZO, 50);
-
+int Humidifier::setPiezoPwm(int8_t piezoNum)
+{
+    if (piezoNum < -1 || piezoNum >= NUM_OF_PIEZOS) {
+        return -EINVAL;
+    }
+    if (!hardwareReady) {
+        return -ENODEV;
+    }
+    int ret = disablePiezos();
+    if (ret < 0 || piezoNum == -1) {
+        return ret;
+    }
+#if DT_NODE_HAS_STATUS(DT_ALIAS(piezo_pwm), okay) && defined(CONFIG_PWM_LED_ESP32)
+    const auto &piezo = settings.piezos.piezos[piezoNum];
+    uint64_t clockHz;
+    ret = pwm_get_cycles_per_sec(piezoPwm.dev, piezoPwm.channel, &clockHz);
+    if (ret < 0) {
+        return ret;
+    }
+    PiezoPwmTiming timing;
+    if (!calculatePiezoPwm(clockHz, piezo.frequencyHz, piezo.intensity, timing)) {
+        return -ENOTSUP;
+    }
+    ret = pwm_set_cycles(piezoPwm.dev, piezoPwm.channel,
+                         timing.periodCycles, timing.pulseCycles, piezoPwm.flags);
+    if (ret == 0) {
+        ret = gpio_pin_set_dt(&selectors[piezoNum], 1);
+    }
+    if (ret < 0) {
+        disablePiezos();
+        return ret;
+    }
+    settings.piezos.active = piezoNum;
+    settings.piezos.actualFrequencyHz = timing.actualFrequencyHz;
+    settings.piezos.actualDutyBasisPoints = timing.actualDutyBasisPoints;
+    return 0;
+#else
+    return -ENOTSUP;
+#endif
 }
 
 void Humidifier::buttonsHandlerWrapper(struct input_event *val, void *userData)
@@ -371,7 +350,7 @@ int Humidifier::nvsInit()
 
     struct flash_pages_info info;
 
-    fs = new nvs_fs;
+    fs = new nvs_fs{};
 
     fs->flash_device = NVS_PARTITION_DEVICE;
 
@@ -400,7 +379,10 @@ int Humidifier::nvsInit()
     rc = nvs_mount(fs);
 
     if (rc) {
-        LOG_ERR("nvs_mount failed");
+        LOG_ERR("nvs_mount failed (%d): offset=0x%lx, sector_size=%u, sector_count=%u",
+                rc, static_cast<unsigned long>(fs->offset),
+                static_cast<unsigned int>(fs->sector_size),
+                static_cast<unsigned int>(fs->sector_count));
         return rc;
     }
 
@@ -409,69 +391,103 @@ int Humidifier::nvsInit()
 
 int Humidifier::readInfosFromMemory()
 {
-    nvsInit();
+    setDefaultSettings();
+    int ret = nvsInit();
+    if (ret < 0) {
+        LOG_ERR("Settings storage unavailable (%d)", ret);
+        return ret;
+    }
+    storageReady = true;
+    StoredSettings saved{};
+    ret = nvs_read(fs, NVS_SETTINGS_V2_ID, &saved, sizeof(saved));
+    if (ret == sizeof(saved) && saved.magic == SETTINGS_MAGIC &&
+        saved.version == 2 && validSettings(saved.value)) {
+        settings = saved.value;
+        return 0;
+    }
 
-//     int rc = nvs_read(
-//         fs,
-//         NVS_SETTINGS_ID,
-//         &settings,
-//         sizeof(settings)
-//     );
-
-//     if (rc <= 0)
-//     {
-//         LOG_INF("No saved settings found");
-
-        setDefaultSettings();
-//     }
-
-//     return rc;
-    return 0;
+    LegacySettings legacy{};
+    ret = nvs_read(fs, NVS_SETTINGS_ID, &legacy, sizeof(legacy));
+    if (ret == sizeof(legacy) && legacy.piezos.piezosNum == NUM_OF_PIEZOS &&
+        legacy.schedulesNum <= MAX_SCHEDULES) {
+        settings.fanSpeed = MIN(legacy.fanSpeed, 100);
+        if (legacy.credentials.ssid[0] != '\0' &&
+            memchr(legacy.credentials.ssid, '\0', sizeof(legacy.credentials.ssid)) &&
+            memchr(legacy.credentials.password, '\0', sizeof(legacy.credentials.password))) {
+            settings.credentials = legacy.credentials;
+        }
+        settings.nextScheduleId = legacy.nextScheduleId;
+        settings.schedulesNum = legacy.schedulesNum;
+        memcpy(settings.schedules, legacy.schedules, sizeof(settings.schedules));
+        for (int i = 0; i < NUM_OF_PIEZOS; ++i) {
+            settings.piezos.piezos[i].brightness = MIN(legacy.piezos.piezos[i].brightness, 100);
+            settings.piezos.piezos[i].intensity = MIN(legacy.piezos.piezos[i].intensity, 100);
+        }
+    }
+    return writeSettings();
 }
 
 int Humidifier::writeSettings()
 {
-    return nvs_write(
-        fs,
-        NVS_SETTINGS_ID,
-        &settings,
-        sizeof(settings)
-    );
+    if (!storageReady) {
+        return -EIO;
+    }
+    StoredSettings saved{SETTINGS_MAGIC, 2, settings};
+    int ret = nvs_write(fs, NVS_SETTINGS_V2_ID, &saved, sizeof(saved));
+    return ret < 0 ? ret : 0;
 }
 
-void Humidifier::parsePiezosPost(char *buf, size_t len)
+int Humidifier::parsePiezosPost(char *buf, size_t len)
 {
-    struct PiezoStatusUpdate cmd = {0};
+    PiezoStatusUpdate cmd{};
+    int fields = parsePiezoCommand(buf, len, cmd);
+    if (fields < 0 || !(fields & BIT(0))) {
+        return -EINVAL;
+    }
+    if (cmd.piezoNum < -1 || cmd.piezoNum >= NUM_OF_PIEZOS ||
+        ((fields & BIT(1)) && (cmd.brightness < 0 || cmd.brightness > 100)) ||
+        ((fields & BIT(2)) && (cmd.intensity < 0 || cmd.intensity > 100)) ||
+        ((fields & BIT(3)) && (cmd.frequencyHz < static_cast<int32_t>(PIEZO_FREQUENCY_MIN_HZ) ||
+                               cmd.frequencyHz > static_cast<int32_t>(PIEZO_FREQUENCY_MAX_HZ)))) {
+        return -ERANGE;
+    }
 
-    int ret = json_obj_parse(
-        buf,
-        len,
-        piezoDescrUpdate,
-        ARRAY_SIZE(piezoDescrUpdate),
-        &cmd
-    );
-
+    SettingsLock lock;
+    PiezoStatus previous{};
+    if (cmd.piezoNum >= 0) {
+        auto &piezo = settings.piezos.piezos[cmd.piezoNum];
+        previous = piezo;
+        if (fields & BIT(1)) { piezo.brightness = cmd.brightness; }
+        if (fields & BIT(2)) { piezo.intensity = cmd.intensity; }
+        if (fields & BIT(3)) { piezo.frequencyHz = cmd.frequencyHz; }
+    }
+    int ret = setPiezoPwm(cmd.piezoNum);
     if (ret < 0) {
-        LOG_ERR("Piezo parse failed");
-        return;
+        if (cmd.piezoNum >= 0) {
+            settings.piezos.piezos[cmd.piezoNum] = previous;
+        }
+        LOG_ERR("Piezo output failed (%d)", ret);
+        // Validation errors above are 4xx; a driver failure is always 5xx.
+        return -EIO;
     }
-
-    if (cmd.piezoNum >= NUM_OF_PIEZOS) {
-        return;
+    settings.activeRoutine = MANUAL;
+    for (auto &schedule : settings.schedules) {
+        schedule.running = false;
+        schedule.stopEpoch = 0;
     }
-
-    settings.piezos.piezos[cmd.piezoNum].brightness = cmd.brightness;
-
-    settings.piezos.piezos[cmd.piezoNum].intensity = cmd.intensity;
-
-    setPiezoPwm(cmd.piezoNum);
-
-    writeSettings();
+    ret = writeSettings();
+    if (ret < 0) {
+        // A failed save must not leave an unacknowledged output running.
+        setPiezoPwm(-1);
+        return -EIO;
+    }
+    return 0;
 }
 
 void Humidifier::parseFanPost(char *buf, size_t len)
 {
-    struct FanStatus cmd;
+    SettingsLock lock;
+    struct FanStatus cmd{};
 
     int ret = json_obj_parse(
         buf,
@@ -481,7 +497,7 @@ void Humidifier::parseFanPost(char *buf, size_t len)
         &cmd
     );
 
-    if (ret < 0) {
+    if (ret != BIT(0) || cmd.speed > 100) {
         LOG_ERR("Fan parse failed");
         return;
     }
@@ -495,6 +511,7 @@ void Humidifier::parseFanPost(char *buf, size_t len)
 
 void Humidifier::parseCredentialsPost(char *buf, size_t len)
 {
+    SettingsLock lock;
     struct Credentials cmd = {0};
 
     int ret = json_obj_parse(
@@ -505,7 +522,7 @@ void Humidifier::parseCredentialsPost(char *buf, size_t len)
         &cmd
     );
 
-    if (ret < 0) {
+    if (ret != (BIT(0) | BIT(1)) || cmd.ssid[0] == '\0') {
         LOG_ERR("Credentials parse failed");
         return;
     }
@@ -517,6 +534,7 @@ void Humidifier::parseCredentialsPost(char *buf, size_t len)
 
 int Humidifier::fanStatus(char *buf, size_t bufSize)
 {
+    SettingsLock lock;
     struct FanStatus fan;
 
     fan.speed = settings.fanSpeed;
@@ -532,6 +550,7 @@ int Humidifier::fanStatus(char *buf, size_t bufSize)
 
 int Humidifier::piezosStatus(char *buf, size_t bufSize)
 {
+    SettingsLock lock;
     return json_obj_encode_buf(
         piezosDescr,
         ARRAY_SIZE(piezosDescr),
@@ -543,6 +562,7 @@ int Humidifier::piezosStatus(char *buf, size_t bufSize)
 
 int Humidifier::credentialStatus(char *buf, size_t bufSize)
 {
+    SettingsLock lock;
     return json_obj_encode_buf(
         credentialsDescr,
         ARRAY_SIZE(credentialsDescr),
@@ -620,149 +640,31 @@ void Humidifier::setCredentials(char *ssid, char *password)
 
 void Humidifier::getCredentials(char *ssid, char *psk)
 {
-    strncpy(
-        ssid,
-        settings.credentials.ssid,
-        strlen(settings.credentials.ssid)
-    );
-
-    strncpy(
-        psk,
-        settings.credentials.password,
-        strlen(settings.credentials.password)
-    );
-}
-
-bool Humidifier::safetyCheck()
-{
-	bool lowPiezos[NUM_OF_PIEZOS];
-	bool fault = false;
-
-	for (uint8_t i = 0; i < NUM_OF_PIEZOS; i++)
-	{
-		lowPiezos[i] = checkLowPiezo(i);
-	}
-
-	if(lowPiezos[0])
-	{
-		led_set_brightness(pwmsDev, RED0, settings.piezos.piezos[0].brightness);
-	}
-
-	if(lowPiezos[1])
-	{
-		led_set_brightness(pwmsDev, RED1, settings.piezos.piezos[1].brightness);
-	}
-
-	if(lowPiezos[2])
-	{
-		led_set_brightness(pwmsDev, RED2, settings.piezos.piezos[2].brightness);
-	}
-
-	if(lowPiezos[0] || lowPiezos[1] || lowPiezos[2])
-	{
-		fault = true;
-		k_sleep(K_SECONDS(60));
-	}
-	return fault;
-}
-
-bool Humidifier::checkLowPiezo(uint8_t i)
-{
-	int ret = gpio_pin_set_dt(&selectors[i], GPIO_OUTPUT_ACTIVE);
-	uint16_t value = readAdc(0);
-	//
-	value = 2000;
-	//
-
-	if(ret)
-	{
-		LOG_ERR("failed to turn the led on");
-	}
-	if (value < LOW_LEVEL_THRESHOLD)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-uint16_t Humidifier::readAdc(uint8_t index)
-{
-	uint16_t buf;
-	struct adc_sequence sequence = {
-		.buffer = &buf,
-		/* buffer size in bytes, not number of samples */
-		.buffer_size = sizeof(buf),
-		// .calibrate = true,
-		// .options = adc_sequence_options
-	};
-
-	// int32_t val_mv;
-
-	// LOG_INF("- %s, channel %d: ",
-	// 		adc_channels[index].dev->name,
-	// 		adc_channels[index].channel_id);
-
-	(void)adc_sequence_init_dt(&adc_channels[index], &sequence);
-
-	int err = adc_read_dt(&adc_channels[index], &sequence);
-	if (err < 0) {
-		LOG_INF("Could not read (%d)\n", err);
-	}
-	return buf>>2;
-
-	// val_mv = (int32_t)buf;
-
-	// // LOG_INF("%"PRId32, val_mv);
-	// // err = adc_raw_to_millivolts_dt(&adc_channels[index],
-	// // 					&val_mv);
-	/* conversion to mV may not be supported, skip if not */
-		// if (err < 0) {
-		// 	printk(" (value in mV not available)\n");
-		// } else {
-		// 	printk(" = %"PRId32" mV\n", val_mv);
-		// }
-	// return val_mv;
-
+    SettingsLock lock;
+    memcpy(ssid, settings.credentials.ssid, sizeof(settings.credentials.ssid));
+    memcpy(psk, settings.credentials.password, sizeof(settings.credentials.password));
 }
 
 int Humidifier::hardwareInit()
 {
-
-	int ret = 0;
-
-	if (!device_is_ready(pwmsDev)) {
-		LOG_ERR("PWM device not ready");
-		return -1;
-	}
-	if (!adc_is_ready_dt(&adc_channels[0])) {
-		LOG_ERR("ADC controller device %s not ready\n", adc_channels[0].dev->name);
-		return -1;
-	}
-
-	ret = adc_channel_setup_dt(&adc_channels[0]);
-	if (ret < 0) {
-		LOG_ERR("Could not setup channel #%d (%d)\n", 0, ret);
-		return ret;
-	}
-
-	for (int i = 0; i < NUM_OF_PIEZOS; i++) {
-
-		if (!gpio_is_ready_dt(&selectors[i])) {
-			LOG_ERR("GPIO selector %d not ready", i);
-			return -1;
-		}
-
-		ret = gpio_pin_configure_dt(
-		&selectors[i],
-		GPIO_OUTPUT_INACTIVE
-		);
-
-		if (ret < 0) {
-			LOG_ERR("GPIO selector %d configure failed (%d)", i, ret);
-			return ret;
-		}
-	}
+    // Configure selectors off before touching any peripheral that could fail.
+    BUILD_ASSERT(ARRAY_SIZE(selectors) == NUM_OF_PIEZOS);
+    for (int i = 0; i < NUM_OF_PIEZOS; ++i) {
+        if (!gpio_is_ready_dt(&selectors[i])) {
+            return -ENODEV;
+        }
+        int ret = gpio_pin_configure_dt(&selectors[i], GPIO_OUTPUT_INACTIVE);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+#if DT_NODE_HAS_STATUS(DT_ALIAS(piezo_pwm), okay) && defined(CONFIG_PWM_LED_ESP32)
+    if (!pwm_is_ready_dt(&piezoPwm) || !device_is_ready(pwmsDev)) {
+        return -ENODEV;
+    }
+    return 0;
+#else
+    LOG_ERR("This board has no supported independent piezo PWM output");
+    return -ENOTSUP;
+#endif
 }

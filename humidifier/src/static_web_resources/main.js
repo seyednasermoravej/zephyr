@@ -3,54 +3,150 @@
 // ==========================================
 const state = {
   mode: 'manual',
-  activePiezo: 0,
+  activePiezo: -1,
   piezos: [
-    { brightness: 50, intensity: 50 },
-    { brightness: 50, intensity: 50 },
-    { brightness: 50, intensity: 50 }
+    { brightness: 50, intensity: 50, frequencyHz: 1700000 },
+    { brightness: 50, intensity: 50, frequencyHz: 1700000 },
+    { brightness: 50, intensity: 50, frequencyHz: 1700000 }
   ],
   fan: 50,
+  loaded: { piezo: false, fan: false },
   schedules: [],
   timeouts: { piezo: null, fan: null }
 };
+const writes = { piezo: Promise.resolve(), fan: Promise.resolve() };
+const revisions = { piezo: 0, fan: 0 };
+const writeGenerations = { piezo: 0, fan: 0 };
+const REQUEST_TIMEOUT_MS = 5000;
 
 function clamp(val) { 
   return Math.max(0, Math.min(100, parseInt(val, 10) || 0)); 
 }
 
+async function checkedFetch(url, options, format = 'text') {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) {
+      const detail = (await response.text()).trim();
+      throw new Error(detail || `HTTP ${response.status}`);
+    }
+    // Keep the deadline active while reading the body as well as the headers.
+    return await response[format]();
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Request timed out. Check the device connection and try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function showControlStatus(control, message, kind = '') {
+  const el = document.getElementById(`${control}-status`);
+  el.textContent = message;
+  el.className = `status ${kind}`;
+  document.getElementById(`${control}-retry`).classList.toggle('hidden', kind !== 'error');
+}
+
+function renderPiezoControls() {
+  document.querySelectorAll('input[name="active-piezo"]').forEach(r => {
+    r.checked = Number(r.value) === state.activePiezo;
+    r.disabled = !state.loaded.piezo;
+  });
+  const piezo = state.piezos[state.activePiezo === -1 ? 0 : state.activePiezo];
+  for (const [id, value] of [
+    ['m_br', piezo.brightness],
+    ['m_int', piezo.intensity],
+    ['m_freq', (piezo.frequencyHz / 1000000).toFixed(3)]
+  ]) {
+    document.getElementById(id).value = value;
+    document.getElementById(`${id}_in`).value = value;
+  }
+  document.querySelectorAll('#manual-controls input').forEach(i => {
+    i.disabled = !state.loaded.piezo || state.activePiezo === -1;
+  });
+}
+
+function renderAppliedPiezo(data) {
+  const el = document.getElementById('piezo-applied');
+  if (!Number.isFinite(data.actualFrequencyHz) || !Number.isFinite(data.actualDutyBasisPoints)) {
+    el.textContent = 'Applied settings are unavailable.';
+    return;
+  }
+  if (data.actualFrequencyHz === 0) {
+    el.textContent = 'All piezos are off.';
+    return;
+  }
+  const frequency = (data.actualFrequencyHz / 1000000).toFixed(6);
+  const duty = (data.actualDutyBasisPoints / 100).toFixed(2);
+  const constant = data.actualDutyBasisPoints === 0 || data.actualDutyBasisPoints === 10000;
+  const active = [0, 1, 2].includes(data.active) ? `Piezo ${data.active} · ` : '';
+  el.textContent = constant
+    ? `${active}Configured frequency: ${frequency} MHz. Output is constant ${data.actualDutyBasisPoints === 0 ? 'low' : 'high'} (${duty}% duty cycle).`
+    : `${active}Applied frequency: ${frequency} MHz · PWM duty cycle: ${duty}%.`;
+}
+
 // ==========================================
 // 2. SYNC LOGIC
 // ==========================================
-function syncPiezo() {
-  clearTimeout(state.timeouts.piezo);
-  state.timeouts.piezo = setTimeout(async () => {
-    if (state.activePiezo === -1) return;
-    const p = state.piezos[state.activePiezo];
-    try {
-      await fetch('/piezos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          piezoNum: state.activePiezo, 
-          brightness: p.brightness, 
-          intensity: p.intensity 
-        })
-      });
-    } catch (e) { console.warn('Piezo sync failed:', e.message); }
-  }, 250);
+function scheduleWrite(control, url, payload, immediate = false) {
+  clearTimeout(state.timeouts[control]);
+  const revision = ++revisions[control];
+  const generation = writeGenerations[control];
+  showControlStatus(control, 'Applying settings...');
+  if (control === 'piezo') document.getElementById('piezo-applied').textContent = 'Awaiting confirmation from the device.';
+  const submit = () => {
+    // Capture each command and serialize requests so an older reply cannot
+    // leave the device on a previously selected piezo after Off is selected.
+    writes[control] = writes[control].then(async () => {
+      if (generation !== writeGenerations[control]) return;
+      try {
+        const applied = await checkedFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }, control === 'piezo' ? 'json' : 'text');
+        if (revision === revisions[control]) {
+          if (control === 'piezo') renderAppliedPiezo(applied);
+          showControlStatus(control, 'Settings applied.', 'success');
+        }
+      } catch (e) {
+        // The device may have applied a command whose response was lost. Drop
+        // the queued backlog and keep the latest desired state for explicit Retry.
+        ++writeGenerations[control];
+        clearTimeout(state.timeouts[control]);
+        const failedRevision = revisions[control];
+        if (control === 'piezo') document.getElementById('piezo-applied').textContent = 'Applied settings are unconfirmed.';
+        showControlStatus(control, `Settings request failed: ${e.message}`, 'error');
+        if (control === 'piezo') {
+          try {
+            const confirmed = await checkedFetch('/piezos', undefined, 'json');
+            if (failedRevision === revisions[control]) renderAppliedPiezo(confirmed);
+          } catch (_) {
+            // Keep the unconfirmed message if the device is unreachable.
+          }
+        }
+      }
+    });
+  };
+  if (immediate) submit();
+  else state.timeouts[control] = setTimeout(submit, 250);
 }
 
-function syncFan() {
-  clearTimeout(state.timeouts.fan);
-  state.timeouts.fan = setTimeout(async () => {
-    try {
-      await fetch('/fan', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ speed: state.fan }) 
-      });
-    } catch (e) { console.warn('Fan sync failed:', e.message); }
-  }, 250);
+function syncPiezo(immediate = false) {
+  if (!state.loaded.piezo) return;
+  const payload = state.activePiezo === -1
+    ? { piezoNum: -1 }
+    : { piezoNum: state.activePiezo, ...state.piezos[state.activePiezo] };
+  scheduleWrite('piezo', '/piezos', payload, immediate);
+}
+
+function syncFan(immediate = false) {
+  if (!state.loaded.fan) return;
+  scheduleWrite('fan', '/fan', { speed: state.fan }, immediate);
 }
 
 // ==========================================
@@ -72,47 +168,59 @@ function bindModeSelector() {
 
 function bindPiezoBullets() {
   document.querySelectorAll('input[name="active-piezo"]').forEach(r => {
-    r.checked = parseInt(r.value) === state.activePiezo;
     r.addEventListener('change', e => {
+      if (!state.loaded.piezo) return;
       state.activePiezo = parseInt(e.target.value);
-      const idx = state.activePiezo === -1 ? 0 : state.activePiezo;
-      
-      document.getElementById('m_br').value = state.piezos[idx].brightness;
-      document.getElementById('m_br_in').value = state.piezos[idx].brightness;
-      document.getElementById('m_int').value = state.piezos[idx].intensity;
-      document.getElementById('m_int_in').value = state.piezos[idx].intensity;
-      
-      document.querySelectorAll('#manual-controls input').forEach(i => 
-        i.disabled = state.activePiezo === -1
-      );
-      syncPiezo();
+      renderPiezoControls();
+      syncPiezo(true);
     });
   });
+  document.getElementById('piezo-retry').onclick = () => {
+    if (state.loaded.piezo) syncPiezo(true);
+    else loadPiezos();
+  };
 }
 
 function bindManualSliders() {
-  const pair = (sId, iId, ch) => {
+  const pair = (sId, iId, ch, normalize = clamp, format = v => v) => {
     const s = document.getElementById(sId), i = document.getElementById(iId);
     if (!s || !i) return;
-    const up = v => { 
-      const c = clamp(v); 
-      s.value = c; i.value = c; 
-      const idx = state.activePiezo === -1 ? 0 : state.activePiezo;
-      state.piezos[idx][ch] = c; 
-      if (state.activePiezo !== -1) syncPiezo(); 
+    const up = v => {
+      if (!state.loaded.piezo || state.activePiezo === -1) return;
+      if (v === '' || !Number.isFinite(Number(v))) {
+        renderPiezoControls();
+        return;
+      }
+      const c = normalize(v);
+      s.value = format(c); i.value = format(c);
+      state.piezos[state.activePiezo][ch] = c;
+      syncPiezo();
     };
     s.oninput = e => up(e.target.value);
-    i.oninput = e => up(e.target.value);
+    i.onchange = e => up(e.target.value);
     i.onkeydown = e => { if(e.key==='Enter') i.blur(); };
   };
   pair('m_br', 'm_br_in', 'brightness');
   pair('m_int', 'm_int_in', 'intensity');
+  pair('m_freq', 'm_freq_in', 'frequencyHz',
+    v => Math.max(1600000, Math.min(1800000, Math.round(Number(v) * 1000) * 1000)),
+    v => (v / 1000000).toFixed(3));
 }
 
 function bindGlobalFan() {
   const s = document.getElementById('fan_sl'), i = document.getElementById('fan_in');
-  s.oninput = () => { i.value = s.value; state.fan = clamp(s.value); syncFan(); };
-  i.onchange = () => { s.value = i.value; state.fan = clamp(i.value); syncFan(); };
+  const up = value => {
+    if (!state.loaded.fan) return;
+    state.fan = clamp(value);
+    s.value = state.fan; i.value = state.fan;
+    syncFan();
+  };
+  s.oninput = () => up(s.value);
+  i.onchange = () => up(i.value);
+  document.getElementById('fan-retry').onclick = () => {
+    if (state.loaded.fan) syncFan(true);
+    else loadFan();
+  };
 }
 
 // ==========================================
@@ -301,7 +409,7 @@ function bindScheduleCards() {
       btn.disabled = true; 
       btn.textContent = 'Saving...';
       try {
-        await fetch('/schedules', { 
+        await checkedFetch('/schedules', {
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify({ schedule: sch }) 
@@ -344,7 +452,7 @@ document.getElementById('net_save').onclick = async (e) => {
   
   btn.disabled = true; btn.textContent = 'Saving...';
   try {
-    await fetch('/credentials', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ssid, password:pass}) });
+    await checkedFetch('/credentials', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ssid, password:pass}) });
     status.textContent = '✅ Saved.'; status.className = 'status success';
     document.getElementById('net_pass').value = '';
   } catch(err) { status.textContent = ` ${err.message}`; status.className = 'status error'; }
@@ -357,44 +465,91 @@ document.getElementById('pass_toggle').onclick = () => {
   document.getElementById('pass_toggle').textContent = p.type === 'password' ? '👁️' : '🙈';
 };
 
-async function fetchInitialData() {
-  try {
-    const p = await fetch('/piezos');
-    if (p.ok) {
-      const d = await p.json();
-      if (d.active !== undefined) state.activePiezo = d.active;
-      d.piezos?.forEach((v, i) => { if(i<3){ state.piezos[i].brightness = v.brightness||50; state.piezos[i].intensity = v.intensity||50; }});
-    }
-    const f = await fetch('/fan');
-    if (f.ok) state.fan = (await f.json()).speed || 50;
-    
-    document.querySelector(`input[name="active-piezo"][value="${state.activePiezo}"]`).checked = true;
-    const idx = state.activePiezo === -1 ? 0 : state.activePiezo;
-    document.getElementById('m_br').value = state.piezos[idx].brightness; document.getElementById('m_br_in').value = state.piezos[idx].brightness;
-    document.getElementById('m_int').value = state.piezos[idx].intensity; document.getElementById('m_int_in').value = state.piezos[idx].intensity;
-    document.getElementById('fan_sl').value = state.fan; document.getElementById('fan_in').value = state.fan;
-    document.querySelectorAll('#manual-controls input').forEach(i => i.disabled = state.activePiezo === -1);
+function isPercent(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 100;
+}
 
-    const c = await fetch('/credentials');
-    if (c.ok) document.getElementById('net_ssid').value = (await c.json()).ssid || '';
-  } catch(e) { console.warn('Init fetch failed:', e.message); }
+async function loadPiezos() {
+  showControlStatus('piezo', 'Loading piezo settings...');
+  try {
+    const d = await checkedFetch('/piezos', undefined, 'json');
+    if (![-1, 0, 1, 2].includes(d.active) || !Array.isArray(d.piezos) || d.piezos.length !== 3) {
+      throw new Error('Invalid piezo settings received');
+    }
+    const piezos = d.piezos.map(p => {
+      const frequencyHz = p.frequencyHz ?? 1700000;
+      if (!isPercent(p.brightness) || !isPercent(p.intensity) ||
+          !Number.isInteger(frequencyHz) || frequencyHz < 1600000 || frequencyHz > 1800000) {
+        throw new Error('Invalid piezo settings received');
+      }
+      return { brightness: p.brightness, intensity: p.intensity, frequencyHz };
+    });
+    state.piezos = piezos;
+    state.activePiezo = d.active;
+    state.loaded.piezo = true;
+    renderPiezoControls();
+    renderAppliedPiezo(d);
+    showControlStatus('piezo', 'Settings loaded.');
+  } catch (e) {
+    showControlStatus('piezo', `Could not load piezo settings: ${e.message}`, 'error');
+  }
+}
+
+async function loadFan() {
+  showControlStatus('fan', 'Loading fan settings...');
+  try {
+    const d = await checkedFetch('/fan', undefined, 'json');
+    if (!isPercent(d.speed)) throw new Error('Invalid fan speed received');
+    state.fan = d.speed;
+    state.loaded.fan = true;
+    document.getElementById('fan_sl').value = state.fan; document.getElementById('fan_in').value = state.fan;
+    document.getElementById('fan_sl').disabled = false;
+    document.getElementById('fan_in').disabled = false;
+    showControlStatus('fan', 'Settings loaded.');
+  } catch (e) {
+    showControlStatus('fan', `Could not load fan settings: ${e.message}`, 'error');
+  }
+}
+
+async function loadCredentials() {
+  try {
+    const credentials = await checkedFetch('/credentials', undefined, 'json');
+    document.getElementById('net_ssid').value = credentials.ssid || '';
+  } catch (e) {
+    const status = document.getElementById('net_status');
+    status.textContent = `Could not load credentials: ${e.message}`;
+    status.className = 'status error';
+  }
+}
+
+async function fetchInitialData() {
+  await Promise.all([loadPiezos(), loadFan(), loadCredentials()]);
 }
 
 const clk = { ts:0, sync:false, last:0 };
 async function updateClock() {
   try {
-    const r = await fetch('/time'); 
-    if(r.ok){const d=await r.json(); clk.ts=d.timestamp; clk.sync=d.synced; clk.last=Math.floor(Date.now()/1000);}
-  } catch(e){}
+    const d = await checkedFetch('/time', undefined, 'json');
+    clk.ts = d.timestamp; clk.sync = d.synced; clk.last = Math.floor(Date.now()/1000);
+  } catch(e) { clk.sync = false; }
   const now = new Date((clk.ts + Math.floor((Date.now()/1000)-clk.last))*1000);
   document.getElementById('clock-time').textContent = now.toLocaleTimeString('en-GB');
   document.getElementById('clock-date').textContent = now.toLocaleDateString('en-GB');
   const el = document.getElementById('clock-sync-status');
   el.textContent = clk.sync?'✅ Synced':' Offline';
   el.className = `sync-status ${clk.sync?'synced':'offline'}`;
+  setTimeout(updateClock, 1000);
 }
 
-setInterval(async()=>{ try{const r=await fetch('/uptime'); if(r.ok)document.getElementById('uptime').textContent=`${await r.text()} ms`;}catch(e){}},1000);
+async function updateUptime() {
+  try {
+    const uptime = await checkedFetch('/uptime');
+    document.getElementById('uptime').textContent = `${uptime} ms`;
+  } catch (e) {
+    document.getElementById('uptime').textContent = 'Unavailable — device not responding';
+  }
+  setTimeout(updateUptime, 1000);
+}
 
 // ==========================================
 // 6. INITIALIZATION
@@ -404,8 +559,9 @@ document.addEventListener('DOMContentLoaded', () => {
   bindPiezoBullets();
   bindManualSliders();
   bindGlobalFan();
+  renderPiezoControls();
   fetchInitialData();
   renderSchedules(); // Initial render of schedules
   updateClock();
-  setInterval(updateClock, 1000);
+  updateUptime();
 });

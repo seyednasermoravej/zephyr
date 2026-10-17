@@ -1,3 +1,190 @@
+Humidifier controls (ESP32 DevKitC)
+==================================
+
+The embedded web UI, HTTP API, and firmware support selecting Piezo 0, 1,
+or 2, turning all piezos off, and saving each piezo's target frequency
+(1.600--1.800 MHz) and PWM duty cycle (0--100%). One piezo can be selected
+at a time. Settings survive reboot; firmware initializes outputs to Off. Old settings
+are migrated to a versioned NVS record while preserving Wi-Fi credentials.
+
+Build and connect
+-----------------
+
+From this application directory, with the Zephyr environment activated::
+
+   west blobs fetch hal_espressif
+   west build -b esp32_devkitc/esp32/procpu -d build . -- -DDTC_OVERLAY_FILE=boards/esp32.overlay
+   west flash -d build
+
+The board joins the saved Wi-Fi network and obtains an address using DHCP.
+Open ``http://<board-ip>/`` using the address logged on the serial console.
+On a fresh device, the default network name is ``Humidifier`` and its
+password is ``12345678``. These are credentials for an external access
+point; the board does not create a hotspot. Alternatively, connect from
+the serial Zephyr shell with ``wifi disconnect`` followed by
+``wifi connect -s "YOUR_SSID" -p "YOUR_PASSWORD" -k 1`` for WPA2-PSK
+(see ``wifi connect -h`` for other options), then save your network in
+the web UI for the next boot. Credential fields
+currently support up to 31 bytes each.
+
+If the saved network is unavailable, the initial connection attempt ends so
+the serial shell can connect to another network. Automatic station retries
+are disabled to avoid rejecting provisioning commands while reconnecting.
+
+The ESP32 allows eight HTTP clients and closes idle connections after three
+seconds. This leaves room for parallel browser requests and API access;
+the previous three-client limit could leave new requests waiting while
+browser keep-alive connections occupied every slot.
+
+In Manual mode, select a piezo and adjust the frequency and PWM controls.
+The UI shows both requested values and the applied hardware values.
+Selecting Off sends an explicit command to disconnect all three selectors
+and stop PWM. Changes are serialized, and rejected requests are displayed
+with a Retry button. The existing scheduling UI has no implemented
+``/schedules`` endpoint; these controls operate in Manual mode.
+
+Debugging with ESP-PROG
+----------------------
+
+In VS Code, select ``ESP32: Debug (build + ESP-PROG flash)`` and press F5.
+This builds a separate ``build-debug`` image using ``debug.conf``, programs
+and verifies it through JTAG, and stops at ``main``. Continue execution to
+start Wi-Fi and the web server. Stop an existing debug session before
+starting another flash operation so the probe is available.
+Ending the single-CPU debug session resumes the application, including
+when the debugger disconnects while execution is paused.
+
+The configuration uses the locally installed Espressif OpenOCD
+``v0.12.0-esp32-20260703`` and Zephyr SDK ``1.0.1``. Adjust the paths in
+``.vscode/launch.json`` and ``.vscode/tasks.json`` if those tools move.
+JTAG runs at 500 kHz. The debug image includes Zephyr thread information;
+OpenOCD exposes the active CPU only for thread-aware debugging. Flash
+probing is disabled during debugging because it stalled on this board;
+programming runs in a separate OpenOCD process with flash support enabled.
+
+The flash task writes ``build-debug/zephyr/zephyr.bin`` at ``0x1000`` for
+this classic ESP32 simple-boot configuration. It does not erase the NVS
+partition at ``0x3b0000``. An attach-only debug profile is also available
+when the board already contains the matching image. The normal-build
+attach profile requires the matching ``build/zephyr/zephyr.elf`` image.
+
+An optimized build can highlight the ``nvs_mount failed`` log line even
+when the call succeeds. Inspect ``rc`` immediately after ``nvs_mount()``
+and check ``fs->ready``. On the connected board, the debug build returned
+``rc = 0`` and ``fs->ready = true``, with two 4096-byte sectors. Mount
+errors now include the return code and geometry in the log.
+
+PWM precision and wiring
+------------------------
+
+The ESP32 overlay uses GPIO19 / LEDC channel 1 / timer 1 for shared piezo
+PWM, with active-high selectors on GPIO22, GPIO23, and GPIO21 for piezos
+0, 1, and 2. Fan/LED outputs use timer 0. The firmware disconnects all
+selectors before reconfiguring PWM, then connects the selected piezo.
+
+Reset needs hardware biasing: a bench capture on 2026-10-12 read all three
+selectors HIGH for about 326 ms during reset/startup, then LOW after
+initialization. ESP32 output drivers are disabled during reset, so floating
+pins can read HIGH; this digital capture does not establish whether a
+connected piezo driver would turn on. Fit external pull-downs on active-high
+selector/control inputs, sized for the connected driver, and repeat the
+reset capture with that circuit connected. Firmware alone cannot keep these
+pins driven LOW while reset is asserted. See the
+`ESP32 datasheet, Appendix A <https://documentation.espressif.com/esp32_datasheet_en.html>`_.
+
+The local Zephyr LEDC driver accepts integer source-clock cycles. With
+the 80 MHz clock, the available frequencies within the requested range
+are approximately 1.600000, 1.632653, 1.666667, 1.702128, 1.739130, and
+1.777778 MHz. Targets are rounded to a supported period while keeping
+the output within 1.6--1.8 MHz. In particular, a 1.800 MHz target produces
+about 1.777778 MHz; this driver interface cannot produce exactly 1.800 MHz.
+Duty cycle has 5-bit resolution (3.125% increments). 0% and 100% produce
+constant low and high outputs, respectively, rather than an oscillation.
+Reported applied values are calculated from timer settings, not measured.
+See the `Espressif LEDC documentation <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/ledc.html>`_
+for the frequency/duty resolution tradeoff.
+
+This implementation targets the ESP32 DevKitC overlay. The experimental
+ESP32-S3 and nRF52840 overlays need independent PWM and selector mappings
+before they can offer equivalent control.
+
+Piezo API
+---------
+
+``GET /piezos`` returns JSON containing ``active`` (-1 for Off, otherwise
+0--2), three ``piezos`` records (``brightness``, ``intensity``, and
+``frequencyHz``), ``actualFrequencyHz``, and ``actualDutyBasisPoints``.
+The latter is percent multiplied by 100 (5000 means 50.00%). Both applied
+fields are zero when Off. At 0%/100% duty, the frequency field describes
+the configured timer period although the output is constant.
+
+``POST /piezos`` requires ``piezoNum``. Other fields are optional and keep
+their saved values when omitted. ``intensity`` is the existing API name
+for PWM duty percentage. Commands accept only these four literal field
+names and integer values; unknown/duplicate fields and trailing data are
+rejected. Examples::
+
+   curl -H 'Content-Type: application/json' -d '{"piezoNum":1,"frequencyHz":1700000,"intensity":50,"brightness":40}' http://<board-ip>/piezos
+   curl -H 'Content-Type: application/json' -d '{"piezoNum":-1}' http://<board-ip>/piezos
+
+Successful requests return the applied status. Invalid values return
+HTTP 400, oversized bodies return 413, and output/storage failures return
+500. Failed output configuration or saving stops the piezo output.
+
+Use ``Content-Length`` request bodies, as the browser UI does. Fragmented
+requests with that framing passed on the device. Chunked request bodies
+are currently unsupported by the local Zephyr HTTP/1 transport; the
+tested valid chunked command returned 400 without changing settings.
+
+Host checks
+-----------
+
+Run from this application directory::
+
+   node --test tests/ui.test.cjs
+   python3 tests/backend/test_piezos_handler.py
+   python3 tests/firmware/test_piezo_control.py
+   python3 tests/firmware/test_piezo_storage.py
+   g++ -std=c++11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined,address -Iinc tests/piezo_pwm_test.cpp -o /tmp/humidifier-piezo-pwm-test
+   /tmp/humidifier-piezo-pwm-test
+
+The tests exercise browser commands, HTTP request handling, and PWM
+frequency/duty conversion.
+
+Hardware checks
+---------------
+
+The ESP32 and Saleae Logic were tested on 2026-10-12. See
+`the hardware test report <tests/hardware/RESULTS.rst>`_ for measurements,
+captures, runtime fixes, and the unresolved reset behavior.
+
+To repeat the waveform checks, enable Logic 2's automation server on port
+10430, stop any manual capture, and install ``logic2-automation`` in a
+Python virtual environment. Connect a shared ground and these channels:
+
+* Channel 0: GPIO19, PWM.
+* Channel 1: GPIO21, Piezo 2 selector.
+* Channel 2: GPIO22, Piezo 0 selector.
+* Channel 3: GPIO23, Piezo 1 selector.
+
+Use a bench circuit prepared for 0--100% duty, including constant HIGH at
+100%. With the board Off and reachable over HTTP, run (use a new output
+directory for each capture run)::
+
+   python tests/hardware/run_checks.py --url http://<board-ip> --output /tmp/humidifier-matrix
+   python tests/hardware/check_switching.py --url http://<board-ip> --output /tmp/humidifier-switching
+   python tests/hardware/check_api.py --url http://<board-ip> --output /tmp/humidifier-api.json
+
+The matrix checks all three selectors at 1.6, 1.7, and 1.8 MHz targets and
+0%, 25%, 50%, 75%, and 100% duty. Waveform scripts restore saved setpoints
+and leave the outputs Off. The 24 MS/s analyzer gives only 13--15 samples
+per PWM cycle, so these measurements cannot resolve every duty increment
+accurately. These checks cover GPIO signals, not the power driver or mist
+production.
+
+Original HTTP server sample documentation
+========================================
+
 .. zephyr:code-sample:: sockets-http-server
    :name: HTTP Server
    :relevant-api: http_service http_server tls_credentials json
